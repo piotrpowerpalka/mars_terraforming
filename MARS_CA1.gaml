@@ -11,8 +11,10 @@ model MARSCA1
 /* Insert your model definition here */
 
 global {
+	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 						//Present day martian solar constant
+    float pr_gazu_wywiewanego <- 0.01;
         
 	init {
 		create cell from: csv_file("../includes/outpkty_z_neigh_4002.csv", ";", true) with:
@@ -38,6 +40,7 @@ global {
 	   		n2_column::float(read("ex58")),
     		albedo::float(read("ex33"))
     		] {
+    			albedo <- 20;
 				int ntmp;
 				int atmp; 
 
@@ -110,18 +113,20 @@ species cell {
     float Lheat <- 43655.0; // Latent heat (?)
     float P0 <- 1.4E6; //Reference pressure (ext(19)?)
     
-    float regolith <- 300e-3; // Regolith capacity of CO2
-    float pole <- 50e-30;
-	float Pr; // Regolith inventory of CO2
+    float regolith <- 300 / 1e3; // Regolith capacity of CO2
+    float pole <- 50 / 1e3;
+	float Pr <- 300 / 1e3; // Regolith inventory of CO2
 	float totCO2; // Total CO2 inventory of Mars
 	float Td <- 30; // Temperature increment to outgas 1/e of regolith
 	float S <- 1.0; //Insolation factor 
 	float albedo; // albedo
+	
 	float pCO2 <- 0.0; //
-	float pN2 <- 0.2e-3;
+	float pN2  <- 0.2 / 1e3;
 	float pCH4 <- 0.0;
 	float pNH3 <- 0.0;
 	float pCFC <- 0.0; // Partial pressures
+	float ppH2O;
 	
 	float Tp;
 	float Tt; // Effective, global surface, polar and tropical temperatures
@@ -147,15 +152,29 @@ species cell {
 	}
     	
 	reflex greenhouse when: cycle > 0 {
+		
 		C <- regolith * 0.006^(-0.275) * exp(149 / Td);
 		
-		tH2O <- pH2O() ^ 0.3;
+		//
+		totCO2 <- Pr + pole + pCO2;
 		
-		Tb <- ((1.0 - 0.2)*(S)/(4.0*sigma)) ^ 0.25;
+		Tb <- ((1.0 - 0.2)*(sol_const)/(4.0*sigma)) ^ 0.25;
+		Ts <- Tb;
+		Tp <- Ts - 75;
 		
-		Ts <- (1 + tCO2() + tH2O + tCH4() + tNH3() + tCFC()) ^ 0.25;
-		Ts <- Ts * ( ((1.0 - albedo/100.0)*(S*sol_const)/(4.0*sigma)) ^ 0.25); 
-		pCO2 <- pressCO2();
+		loop lo from:1 to: 100 {
+			tH2O <- pH2O() ^ 0.3;
+			Ts <- ( ((1.0 - albedo/100.0)*(S*sol_const)/(4.0*sigma)) ^ 0.25);
+			Ts <-  Ts * (1 + tCO2() + tH2O + tCH4() + tNH3() + tCFC()) ^ 0.25;
+			
+			Tp <- Ts - 75 / (1 + 5 * pTot());
+			pCO2 <- pressCO2(); 
+		}
+		Tt <- Ts * 1.1;
+		dT <- Ts - Tb;		
+		
+		ppH2O <- pH2O();
+		
 	}
 	
 	float pressCO2 {
@@ -169,7 +188,7 @@ species cell {
         float bottom; // Bisection method variables
         
         Pa <- pCO2;
-        Pv <- 1.23E7 * -3168 ^ Tp;
+        Pv <- 1.23E7 * exp(-3168 / Tp);
         
         if (Pv > Pa and pole > 0 and Pv < Pa + pole) {
         	pole <- pole - (Pv - Pa);
@@ -199,19 +218,19 @@ species cell {
         
         // Calculation of Pr by bisection method
         loop lop from: 1 to: 50 {
-           if (Y * Pa ^ 0.275 + Pa < X){
+           if (Y * (Pa ^ 0.275) + Pa < X){
            		bottom <- Pa;
            } else {
            		top <- Pa;
            }
            Pa <- bottom + (top - bottom) / 2;
-	       Pr <- Y * Pa ^ 0.275;
-           if (Pr > regolith) {
+        }
+        
+         Pr <- Y * (Pa ^ 0.275);
+         if (Pr > regolith) {
            		Pa <- Pa + Pr - regolith;
                 Pr <- regolith;
-           }
-        }
-            
+         }  
         return Pa;
 	}
 	
@@ -238,22 +257,28 @@ species cell {
     	}
 	}
 	
+	/* Ok */
 	float pH2O {
 		return Rh * P0 * exp(-Lheat / (Rgas * Ts));
 	}
+	/* Ok */
 	float tCO2 {
 		return 0.9 * pTot() ^ 0.45 * pCO2 ^ 0.11;
 	}
+	/* Ok */
 	float tCH4 {
 		return 0.5 * pCH4 ^ 0.278;
 	}
+	/* Ok */
 	float tNH3 {
     	return 9.6 * pNH3 ^ 0.32;
 	}
+	/* Ok */
 	float tCFC {
-		return 1.1 ^ pCFC / (0.015 + pCFC);
+		return 1.1 * pCFC / (0.015 + pCFC);
 	}
 
+	/* Ok */
 	float pTot {
 		return pCO2 + pN2 + pCH4 + pNH3 + (pCFC / 1E5) + pH2O();
 	}
@@ -261,10 +286,16 @@ species cell {
 }
 experiment main_experiment until: (cycle <= 100)
 {
+	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: pr_gazu_wywiewanego  min: 0.0 max: 1.0;
+	
 	output {
 		display mars type: opengl ambient_light: 100
 		{
 			species cell aspect: base;
 		}
 	}
+}
+experiment batch_experiment type: batch repeat: 2 keep_seed: true until: ( cycle > 1000 ) {
+	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: pr_gazu_wywiewanego  min: 0.0 max: 1.0 step: 0.25;
+	
 }
