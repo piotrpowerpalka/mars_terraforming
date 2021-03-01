@@ -14,7 +14,8 @@ global {
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 						//Present day martian solar constant
-    float pr_gazu_wywiewanego <- 0.01;
+    float moving_percentage_of_gas <- 0.01;
+    float opening_angle <- 60.0;
         
 	init {
 		create cell from: csv_file("../includes/outpkty_z_neigh_4002.csv", ";", true) with:
@@ -102,6 +103,7 @@ species cell {
 	int spec;
 	
 	float co2_column;
+	float next_step_co2_column;
 	float n2_column;
 	
 	
@@ -141,17 +143,107 @@ species cell {
 		draw circle(1) color: rgb(temp, 0,0) border: #black;
 	}
 	
+	int find_azim_hex_index( float azim )
+	{
+		if( (azim >= 0 and azim < 30) or (azim >= 330 and azim <= 360))
+		{
+			return 0;
+		}
+		loop i from: 30 to: 270 step: 60  {
+			if( azim >= i and azim < azim+60 )
+			{
+				return (i-30)/60 + 1;
+			}
+		}
+	}
+	
 	reflex move_gas when: cycle > 0 {
 		float wind_direction <- atan2(zonal_wind, merid_wind);
 		
-//		loop idx from: 0 to: azim.length {
-//			if (azim[idx] = wind_direction) {
+		float x1 <- wind_direction - opening_angle/2;
+		
+		if( x1 < 0 ){
+			x1 <- 360.0 + x1;
+		}
+		
+		float x2 <- wind_direction + opening_angle/2;
+		
+		if( x2 > 360.0 ){
+			x2 <- x2 - 360.0;
+		}
+		
+		int i1 <- find_azim_hex_index( x1 );
+		int i2 <- find_azim_hex_index( x2 ); 
+		
+		
+		float CO2_to_be_moved <- moving_percentage_of_gas * co2_column;
+		
+		next_step_co2_column <- co2_column - CO2_to_be_moved;
+		
+		if( i1 = i2 )
+		{
+			// cały gaz idzie do jednego hexa
+			ask neighbours[i1] {
+				next_step_co2_column <- co2_column + CO2_to_be_moved;
+			}
+		}
+		else 
+		{
+			ask neighbours[i1] {
+				float proportion <- 0.0;
 				
-//			}
-//		}
+				if( x1 > 330 )
+				{
+					float proportion <- ( 360 - x1 + 30 ) / opening_angle;
+				}
+				else
+				{
+					float proportion <- abs(( 30 + i1 * 60 )-x1) / opening_angle;	
+				}
+				next_step_co2_column <- co2_column + proportion*CO2_to_be_moved;
+			}
+			
+			ask neighbours[i2] {
+				float proportion <- 0.0;
+				
+				if( x2 < 30 )
+				{
+					float proportion <- ( x2+30 ) / opening_angle;
+				}
+				else
+				{
+					float proportion <- ( x2-30 mod 60 ) / opening_angle;	
+				}
+				next_step_co2_column <- co2_column + proportion*CO2_to_be_moved;
+			}
+			
+			if ( i1 < i2 )
+			{
+				// kierunek północny nie znajduje się między x1 i x2
+				loop i from: i1+1 to: i2-1 {
+					// hexy pomiędzy i1 i i2 otrzymują część gazu proporcjonalną do (60 / opening_angle) 
+					ask neighbours[i] {
+						 next_step_co2_column <- co2_column + (60/opening_angle)*CO2_to_be_moved;
+					}
+				}	
+			}else{
+				// kierunek północny znajduje się miedzy x1 i x2
+				loop i from: 0 to: length(neighbours)-1 {
+					// wszystkie hexy poza tymi, znajdującymi sie miedzy i1 i i2 
+					// otrzymują część gazu proporcjonalną do 60/opening_angle
+					if( i < i2 or i > i1 ) {
+						ask neighbours[i] {
+							next_step_co2_column <- co2_column + (60/opening_angle)*CO2_to_be_moved;
+						}
+					}
+				}
+			}
+			
+		}
 	}
     	
 	reflex greenhouse when: cycle > 0 {
+		co2_column <- next_step_co2_column;
 		
 		C <- regolith * 0.006^(-0.275) * exp(149 / Td);
 		
@@ -286,7 +378,7 @@ species cell {
 }
 experiment main_experiment until: (cycle <= 100)
 {
-	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: pr_gazu_wywiewanego  min: 0.0 max: 1.0;
+	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0;
 	
 	output {
 		display mars type: opengl ambient_light: 100
@@ -296,6 +388,6 @@ experiment main_experiment until: (cycle <= 100)
 	}
 }
 experiment batch_experiment type: batch repeat: 2 keep_seed: true until: ( cycle > 1000 ) {
-	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: pr_gazu_wywiewanego  min: 0.0 max: 1.0 step: 0.25;
+	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0 step: 0.25;
 	
 }
