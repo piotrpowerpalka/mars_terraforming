@@ -41,7 +41,7 @@ global {
 	   		n2_column::float(read("ex58")),
     		albedo::float(read("ex33"))
     		] {
-    			albedo <- 20;
+    			albedo <- 20.0;
 				int ntmp;
 				int atmp; 
 
@@ -69,7 +69,14 @@ global {
 						}
 					}
 				}
+				
     		}
+    }
+    
+    reflex step when: cycle > 0 {
+    	ask cell parallel: true{
+    		do next_step;
+    	}
     }
 }
     
@@ -119,7 +126,7 @@ species cell {
     float pole <- 50 / 1e3;
 	float Pr <- 300 / 1e3; // Regolith inventory of CO2
 	float totCO2; // Total CO2 inventory of Mars
-	float Td <- 30; // Temperature increment to outgas 1/e of regolith
+	float Td <- 30.0; // Temperature increment to outgas 1/e of regolith
 	float S <- 1.0; //Insolation factor 
 	float albedo; // albedo
 	
@@ -143,21 +150,30 @@ species cell {
 		draw circle(1) color: rgb(temp, 0,0) border: #black;
 	}
 	
-	int find_azim_hex_index( float azim )
+	action next_step {
+		do move_gas;
+	}
+	
+	int find_azim_hex_index( float azim_ )
 	{
-		if( (azim >= 0 and azim < 30) or (azim >= 330 and azim <= 360))
+		if( (azim_ >= 0 and azim_ < 30) or (azim_ >= 330 and azim_ <= 360))
 		{
 			return 0;
 		}
 		loop i from: 30 to: 270 step: 60  {
-			if( azim >= i and azim < azim+60 )
+			if( azim_ >= i and azim_ < i+60 )
 			{
 				return (i-30)/60 + 1;
 			}
 		}
 	}
 	
-	reflex move_gas when: cycle > 0 {
+	action move_gas {
+		if spec = 1
+		{
+			next_step_co2_column <- co2_column;
+			return;
+		}
 		float wind_direction <- atan2(zonal_wind, merid_wind);
 		
 		float x1 <- wind_direction - opening_angle/2;
@@ -175,16 +191,15 @@ species cell {
 		int i1 <- find_azim_hex_index( x1 );
 		int i2 <- find_azim_hex_index( x2 ); 
 		
+		float co2_to_be_moved <- moving_percentage_of_gas * co2_column;
 		
-		float CO2_to_be_moved <- moving_percentage_of_gas * co2_column;
-		
-		next_step_co2_column <- co2_column - CO2_to_be_moved;
+		next_step_co2_column <- co2_column - co2_to_be_moved;
 		
 		if( i1 = i2 )
 		{
 			// cały gaz idzie do jednego hexa
 			ask neighbours[i1] {
-				next_step_co2_column <- co2_column + CO2_to_be_moved;
+				next_step_co2_column <- co2_column + co2_to_be_moved;
 			}
 		}
 		else 
@@ -200,7 +215,7 @@ species cell {
 				{
 					float proportion <- abs(( 30 + i1 * 60 )-x1) / opening_angle;	
 				}
-				next_step_co2_column <- co2_column + proportion*CO2_to_be_moved;
+				next_step_co2_column <- co2_column + proportion*co2_to_be_moved;
 			}
 			
 			ask neighbours[i2] {
@@ -214,7 +229,7 @@ species cell {
 				{
 					float proportion <- ( x2-30 mod 60 ) / opening_angle;	
 				}
-				next_step_co2_column <- co2_column + proportion*CO2_to_be_moved;
+				next_step_co2_column <- co2_column + proportion*co2_to_be_moved;
 			}
 			
 			if ( i1 < i2 )
@@ -223,7 +238,7 @@ species cell {
 				loop i from: i1+1 to: i2-1 {
 					// hexy pomiędzy i1 i i2 otrzymują część gazu proporcjonalną do (60 / opening_angle) 
 					ask neighbours[i] {
-						 next_step_co2_column <- co2_column + (60/opening_angle)*CO2_to_be_moved;
+						 next_step_co2_column <- co2_column + (60/opening_angle)*co2_to_be_moved;
 					}
 				}	
 			}else{
@@ -233,7 +248,7 @@ species cell {
 					// otrzymują część gazu proporcjonalną do 60/opening_angle
 					if( i < i2 or i > i1 ) {
 						ask neighbours[i] {
-							next_step_co2_column <- co2_column + (60/opening_angle)*CO2_to_be_moved;
+							next_step_co2_column <- co2_column + (60/opening_angle)*co2_to_be_moved;
 						}
 					}
 				}
@@ -289,7 +304,7 @@ species cell {
         
         if (Pv > Pa + pole and pole > 0) {
             Pa <- Pa + pole;
-            pole <- 0;
+            pole <- 0.0;
         }
         
         if (Pv < Pa)
@@ -305,7 +320,7 @@ species cell {
                 
         Y <- C * exp(-Tp / Td);
         top <- totCO2;
-        bottom <- 0;
+        bottom <- 0.0;
         Pa <- 0.5 * regolith;
         
         // Calculation of Pr by bisection method
