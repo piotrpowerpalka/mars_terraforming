@@ -73,11 +73,11 @@ global {
     		}
     }
     
-    reflex step when: cycle > 0 {
+    /*reflex step when: cycle > 0 { - to jest niepotrzebne, wystarczy zmienić move_gas na reflex move_gas when: cycle > 0 
     	ask cell parallel: true{
     		do next_step;
     	}
-    }
+    }*/
 }
     
 species cell {
@@ -150,9 +150,9 @@ species cell {
 		draw circle(1) color: rgb(temp, 0,0) border: #black;
 	}
 	
-	action next_step {
+	/*action next_step {
 		do move_gas;
-	}
+	}*/
 	
 	int find_azim_hex_index( float azim_ )
 	{
@@ -168,7 +168,7 @@ species cell {
 		}
 	}
 	
-	action move_gas {
+	reflex move_gas when: cycle > 0 {
 		if spec = 1
 		{
 			next_step_co2_column <- co2_column;
