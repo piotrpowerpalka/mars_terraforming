@@ -14,13 +14,36 @@ global {
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 						//Present day martian solar constant
-        float moving_percentage_of_gas <- 0.01;
-	float opening_angle <- 60.0;
+    float moving_percentage_of_gas <- 0.01;
+    float opening_angle <- 60.0;
 	string sollon_number <- 0;
+	string dir_res <- "finite_full";
+    int model_number <- 0;
+    int height_diff_include <- 0;
+    
+    float b0 -> -0.04051304926747448;
+	float b1 -> 1.59819953e-02;
+	float b2 -> -1.20888544e-02; 
+	float b3 -> -6.26106713e-05;
+	float b4 -> -7.87344857e-05; 
+	float b5 -> 9.47135571e-05;
+	
+	float a -> 0.0071;
+	float b -> -0.06;
+	
+	float delta_h2 <- 1.448e9 / 4;
+	float delta_h <- delta_h2 / 3.14;
+	float K_ <- 0.2452348; // K * delta_t / delta_h2
+        
 	init {
-		create cell from: csv_file("../includes/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
-    	[   id_cell::int(read("id")),x::int(read("x")),y::int(read("y")),z::int(read("z")),     	
-    		longitude::float(read("longitude")),latitude::float(read("lattitude")),spec::int(read("spec")),
+		create cell from: csv_file("../MCD/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
+    	[   id_cell::int(read("id")),
+    		x::int(read("x")),
+    		y::int(read("y")),
+    		z::int(read("z")),     	
+    		longitude::float(read("longitude")),
+    		latitude::float(read("lattitude")),
+    		spec::int(read("spec")),
 		    n1::int(read("n1")),
     		n2::int(read("n2")),
     		n3::int(read("n3")),
@@ -33,14 +56,16 @@ global {
     		a4::int(read("a4")),
     		a5::int(read("a5")),
     		a6::int(read("a6")),
-    		temp::float(read("temp")),
-    		zonal_wind::float(read("zonalwind")),
-    		merid_wind::float(read("meridwind")),
-    		atm_press::float(read("atmpress")),
-	   		co2_column::float(read("ex67")),
-	   		n2_column::float(read("ex58")),
-    		albedo::float(read("ex33"))
+    		temp::float(read("temperture")),
+    		zonal_wind::float(read("zonal wind")),
+    		merid_wind::float(read("meridional wind")),
+    		atm_press::float(read("atm pressure")),
+	   		co2_column::float(read("extvar_66")),
+	   		n2_column::float(read("extvar_56")),
+    		albedo::float(read("extvar_32")),
+    		height::float(read("extvar_1"))
     		] {
+    			next_step_co2_column <- co2_column;
     			albedo <- 20.0;
 				int ntmp;
 				int atmp; 
@@ -68,31 +93,19 @@ global {
 							neigh[jdx] <- ntmp;
 						}
 					}
-				}
-				
+				}	
     		}
     }
     
-    reflex step when: cycle > 0 { 
-    	ask cell parallel: true{
-    		do next_step;
-    	}
-    }
-//    
-//    reflex saving when: cycle = 2 {
-//		save species_of(cell) to: "save_csvfile123.csv" type: "csv" header: false attributes: ["x", "y", "co2_column"];
-//
-//    }
-    
-    reflex saving_ {    	
+    reflex saving_ when: cycle > 0 and cycle mod 2 = 0 {    	
     	loop n over: cell {
-    	    save [ n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT] to: "../results/sol" + sollon_number + "/save_csv_" + cycle + ".csv" rewrite: false type: "csv";
+    	    save [ 
+    	    	n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.height, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT
+    	    ] to: "../results/" + dir_res + "/sol" + sollon_number + "/save_csv_" + (cycle / 2) + ".csv" rewrite: false type: "csv";
    	 	}	
    	 }
-    
 }
 
-    
 species cell {
 	list<cell> neighbours;
 	
@@ -117,6 +130,7 @@ species cell {
 	
 	float longitude;
 	float latitude;
+	float height;
 	float zonal_wind;
 	float merid_wind;
 	float atm_press;
@@ -163,31 +177,38 @@ species cell {
 		draw circle(1) color: rgb(temp, 0,0) border: #black;
 	}
 	
-	action next_step {
-		do move_gas;
+	reflex initial when: cycle = 0 {
+		neighbours <- cell where (each.id_cell in neigh);
+		if (spec != 1) {
+    		sh <- polygon([{(neighbours[0].longitude + longitude)/2, (neighbours[0].latitude + latitude)/2}, 
+				{(neighbours[1].longitude + longitude)/2, (neighbours[1].latitude + latitude)/2},
+				{(neighbours[2].longitude + longitude)/2, (neighbours[2].latitude + latitude)/2},
+				{(neighbours[3].longitude + longitude)/2, (neighbours[3].latitude + latitude)/2},
+				{(neighbours[4].longitude + longitude)/2, (neighbours[4].latitude + latitude)/2},
+				{(neighbours[5].longitude + longitude)/2, (neighbours[5].latitude + latitude)/2}
+			]);
+    		
+    	} else {
+    		sh <- polygon([{(neighbours[0].longitude + longitude)/2, (neighbours[0].latitude + latitude)/2}, 
+				{(neighbours[1].longitude + longitude)/2, (neighbours[1].latitude + latitude)/2},
+				{(neighbours[2].longitude + longitude)/2, (neighbours[2].latitude + latitude)/2},
+				{(neighbours[3].longitude + longitude)/2, (neighbours[3].latitude + latitude)/2},
+				{(neighbours[4].longitude + longitude)/2, (neighbours[4].latitude + latitude)/2}
+			]);
+    	}
 	}
-
 	
-	int find_azim_hex_index( float azim_ )
-	{
-		if( (azim_ >= 0 and azim_ < 30) or (azim_ >= 330 and azim_ <= 360))
-		{
-			return 0;
-		}
-		loop i from: 30 to: 270 step: 60  {
-			if( azim_ >= i and azim_ < i+60 )
-			{
-				return (i-30)/60 + 1;
-			}
-		}
-	}
-	
-	action move_gas {
+	reflex move_gas when: cycle mod 2 = 1 and model_number = 0 {
 		if spec = 1
 		{
 			next_step_co2_column <- co2_column;
 			return;
 		}
+		
+		//if height_diff_include = 1 {
+		//	do height_diff_co2_column;	
+		//}
+		
 		float wind_direction <- atan2(zonal_wind, merid_wind);
 		
 		float x1 <- wind_direction - opening_angle/2;
@@ -270,13 +291,88 @@ species cell {
 			
 		}
 	}
-    	
-	reflex greenhouse when: cycle > 0 {
+	
+	reflex move_gas_regression when: cycle > 0 and cycle mod 2 = 1 and model_number = 1
+	{
+		float dw <- atan2( zonal_wind, merid_wind ); // * 180 / 3.14;
+		float xs <- sqrt( zonal_wind^2 + merid_wind^2 );
+		
+		//if height_diff_include = 1 {
+		//	do height_diff_co2_column;	
+		//}
+		
+		loop i from: 0 to: length(neighbours)-1
+		{
+			float xa <- min( (azim[i] - dw ) mod 360, 360 - (azim[i] - dw) mod 360 );
+			
+			float delta_co2_column <- 1/6*(b0 + b1*xa + b2*xs + b3*xa*xa + b4*xa*xs + b5*xs*xs);
+			
+			next_step_co2_column <- next_step_co2_column - delta_co2_column;
+			
+			ask neighbours[i] {
+				next_step_co2_column <- next_step_co2_column + delta_co2_column;
+			}
+		}
+	}
+    		
+	reflex height_diff_co2_column when: cycle > 0 and cycle mod 2 = 1 and model_number = 2
+	{
+		loop n over: neighbours
+		{
+			float height_diff <- n.height - height;
+			float delta_co2 <- 1/6 * (b + a * height_diff);
+			
+			next_step_co2_column <- next_step_co2_column - delta_co2;
+			n.next_step_co2_column <- n.next_step_co2_column + delta_co2;
+		}
+	}
+	
+	reflex finite_element when: cycle > 0 and cycle mod 2 = 1 and model_number = 3
+	{
+		float dw <- atan2( zonal_wind, merid_wind ); // * 180 / 3.14;
+		
+		int beta_az <- length(azim)-1;
+		
+		loop az_index from: 0 to: length(azim) - 2 
+		{
+			if( azim[az_index] < dw and azim[az_index + 1] >  dw )
+			{
+				beta_az <- az_index;
+			}
+		}
+		
+		int alfa_az <- (beta_az+1) mod (length(azim)-1);
+		
+		float alfa <- azim[alfa_az];
+		float beta  <- azim[beta_az];
+		
+		float param <- (1-spec) * 2/3 + spec * 4/5; // jezeli spec to 4/5 inaczej 2/3
+
+		if( alfa = beta ){
+			next_step_co2_column <- co2_column;
+		}else{
+			float alfa_dw <- zonal_wind * (sin(beta) - cos(beta)) / sin(beta - alfa);
+			float beta_dw <- merid_wind * (cos(alfa) - sin(alfa)) / sin(beta - alfa);
+		
+			float neigh_co2_sum <- 0;
+			float height_diff <- 0.0;
+			
+			loop n over: neighbours {
+				neigh_co2_sum <- neigh_co2_sum + n.co2_column;
+				height_diff <-  height_diff + (n.height - height);
+			}
+			
+			height_diff <- height_diff * ((1-spec)/6.0 + spec/5.0);
+		
+			next_step_co2_column <- -(beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column) + K_* (param*neigh_co2_sum - 4*co2_column) + co2_column + (height_diff * 0.00945 + 0.05275);
+		}
+	}
+	
+	reflex greenhouse when: cycle > 0 and cycle mod 2 = 0 {
 		co2_column <- next_step_co2_column;
 		
 		C <- regolith * 0.006^(-0.275) * exp(149 / Td);
 		
-		//
 		totCO2 <- Pr + pole + pCO2;
 		
 		Tb <- ((1.0 - 0.2)*(sol_const)/(4.0*sigma)) ^ 0.25;
@@ -295,7 +391,20 @@ species cell {
 		dT <- Ts - Tb;		
 		
 		ppH2O <- pH2O();
-		
+	}
+
+	int find_azim_hex_index( float azim_ )
+	{
+		if( (azim_ >= 0 and azim_ < 30) or (azim_ >= 330 and azim_ <= 360))
+		{
+			return 0;
+		}
+		loop i from: 30 to: 270 step: 60  {
+			if( azim_ >= i and azim_ < i+60 )
+			{
+				return (i-30)/60 + 1;
+			}
+		}
 	}
 	
 	float pressCO2 {
@@ -355,29 +464,6 @@ species cell {
         return Pa;
 	}
 	
-	
-	reflex initial when: cycle = 0 {
-		
-		neighbours <- cell where (each.id_cell in neigh);
-		if (spec != 1) {
-    		sh <- polygon([{(neighbours[0].longitude + longitude)/2, (neighbours[0].latitude + latitude)/2}, 
-				{(neighbours[1].longitude + longitude)/2, (neighbours[1].latitude + latitude)/2},
-				{(neighbours[2].longitude + longitude)/2, (neighbours[2].latitude + latitude)/2},
-				{(neighbours[3].longitude + longitude)/2, (neighbours[3].latitude + latitude)/2},
-				{(neighbours[4].longitude + longitude)/2, (neighbours[4].latitude + latitude)/2},
-				{(neighbours[5].longitude + longitude)/2, (neighbours[5].latitude + latitude)/2}
-			]);
-    		
-    	} else {
-    		sh <- polygon([{(neighbours[0].longitude + longitude)/2, (neighbours[0].latitude + latitude)/2}, 
-				{(neighbours[1].longitude + longitude)/2, (neighbours[1].latitude + latitude)/2},
-				{(neighbours[2].longitude + longitude)/2, (neighbours[2].latitude + latitude)/2},
-				{(neighbours[3].longitude + longitude)/2, (neighbours[3].latitude + latitude)/2},
-				{(neighbours[4].longitude + longitude)/2, (neighbours[4].latitude + latitude)/2}
-			]);
-    	}
-	}
-	
 	/* Ok */
 	float pH2O {
 		return Rh * P0 * exp(-Lheat / (Rgas * Ts));
@@ -410,7 +496,11 @@ experiment main_experiment until: (cycle <= 100)
 {
 	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0;
 	parameter "Rozwarcie stożka wiatru" var: opening_angle min: 0.0 max: 360.0;
-	parameter "Sollon startowy" var: sollon_number min: 0 max: 100;
+	parameter "Sollon startowy" var: sollon_number min: 0 max: 45;
+	parameter "Numer modelu" var: model_number min: 0;
+	parameter "Uwzględnienie różnicy wysokości" var: height_diff_include min: 0 max: 1;
+	parameter "Katalog z wynikami" var: dir_res;
+	
 	
 	output {
 		display mars type: opengl ambient_light: 100
@@ -419,7 +509,3 @@ experiment main_experiment until: (cycle <= 100)
 		}
 	}
 }
-//experiment batch_experiment type: batch repeat: 2 keep_seed: true until: ( cycle > 1000 ) {
-//	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0 step: 0.25;
-//	
-//}

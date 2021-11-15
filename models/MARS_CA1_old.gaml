@@ -14,11 +14,11 @@ global {
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 						//Present day martian solar constant
-        float moving_percentage_of_gas <- 0.01;
-	float opening_angle <- 60.0;
-	string sollon_number <- 0;
+    float moving_percentage_of_gas <- 0.01;
+    float opening_angle <- 60.0;
+        
 	init {
-		create cell from: csv_file("../includes/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
+		create cell from: csv_file("../includes/outpkty_z_neigh_4002.csv", ";", true) with:
     	[   id_cell::int(read("id")),x::int(read("x")),y::int(read("y")),z::int(read("z")),     	
     		longitude::float(read("longitude")),latitude::float(read("lattitude")),spec::int(read("spec")),
 		    n1::int(read("n1")),
@@ -73,11 +73,11 @@ global {
     		}
     }
     
-    reflex step when: cycle > 0 { 
+    /*reflex step when: cycle > 0 { - to jest niepotrzebne, wystarczy zmienić move_gas na reflex move_gas when: cycle > 0 
     	ask cell parallel: true{
     		do next_step;
     	}
-    }
+    }*/
 //    
 //    reflex saving when: cycle = 2 {
 //		save species_of(cell) to: "save_csvfile123.csv" type: "csv" header: false attributes: ["x", "y", "co2_column"];
@@ -86,7 +86,7 @@ global {
     
     reflex saving_ {    	
     	loop n over: cell {
-    	    save [ n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT] to: "../results/sol" + sollon_number + "/save_csv_" + cycle + ".csv" rewrite: false type: "csv";
+    	    save [ n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT] to: "../results/save_csv_" + cycle + ".csv" rewrite: false type: "csv";
    	 	}	
    	 }
     
@@ -163,9 +163,9 @@ species cell {
 		draw circle(1) color: rgb(temp, 0,0) border: #black;
 	}
 	
-	action next_step {
+	/*action next_step {
 		do move_gas;
-	}
+	}*/
 
 	
 	int find_azim_hex_index( float azim_ )
@@ -182,7 +182,7 @@ species cell {
 		}
 	}
 	
-	action move_gas {
+	reflex move_gas when: cycle > 0 {
 		if spec = 1
 		{
 			next_step_co2_column <- co2_column;
@@ -213,7 +213,7 @@ species cell {
 		{
 			// cały gaz idzie do jednego hexa
 			ask neighbours[i1] {
-				next_step_co2_column <- next_step_co2_column + co2_to_be_moved;
+				next_step_co2_column <- co2_column + co2_to_be_moved;
 			}
 		}
 		else 
@@ -229,7 +229,7 @@ species cell {
 				{
 					float proportion <- abs(( 30 + i1 * 60 )-x1) / opening_angle;	
 				}
-				next_step_co2_column <- next_step_co2_column + proportion*co2_to_be_moved;
+				next_step_co2_column <- co2_column + proportion*co2_to_be_moved;
 			}
 			
 			ask neighbours[i2] {
@@ -243,7 +243,7 @@ species cell {
 				{
 					float proportion <- ( x2-30 mod 60 ) / opening_angle;	
 				}
-				next_step_co2_column <- next_step_co2_column + proportion*co2_to_be_moved;
+				next_step_co2_column <- co2_column + proportion*co2_to_be_moved;
 			}
 			
 			if ( i1 < i2 )
@@ -252,7 +252,7 @@ species cell {
 				loop i from: i1+1 to: i2-1 {
 					// hexy pomiędzy i1 i i2 otrzymują część gazu proporcjonalną do (60 / opening_angle) 
 					ask neighbours[i] {
-						 next_step_co2_column <- next_step_co2_column + (60/opening_angle)*co2_to_be_moved;
+						 next_step_co2_column <- co2_column + (60/opening_angle)*co2_to_be_moved;
 					}
 				}	
 			}else{
@@ -262,7 +262,7 @@ species cell {
 					// otrzymują część gazu proporcjonalną do 60/opening_angle
 					if( i < i2 or i > i1 ) {
 						ask neighbours[i] {
-							next_step_co2_column <- next_step_co2_column + (60/opening_angle)*co2_to_be_moved;
+							next_step_co2_column <- co2_column + (60/opening_angle)*co2_to_be_moved;
 						}
 					}
 				}
@@ -410,7 +410,6 @@ experiment main_experiment until: (cycle <= 100)
 {
 	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0;
 	parameter "Rozwarcie stożka wiatru" var: opening_angle min: 0.0 max: 360.0;
-	parameter "Sollon startowy" var: sollon_number min: 0 max: 100;
 	
 	output {
 		display mars type: opengl ambient_light: 100

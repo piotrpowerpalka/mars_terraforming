@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<Experiment_plan>
+	<Simulation id="1" sourcePath="./models/MARS_CA1_only_finite.gaml" finalStep="1600" experiment="main_experiment" seed="3">
+		<Parameters>
+	   		<Parameter name="moving_percentage_of_gas" type="FLOAT" value="0.0001" />
+	    		<Parameter var="opening_angle" type="FLOAT" value="60.0" />
+			<Parameter var="sollon_number" type="STRING" value="0" />
+			<Parameter var="model_number" type="INT" value="3" />
+	    		<Parameter var="height_diff_include" type="INT" value="0" />
+	  	</Parameters>
+	  	<Outputs>
+	    		<Output id="1" name="mars" framerate="5" />
+	  	</Outputs>
+	</Simulation>
+
+</Experiment_plan>

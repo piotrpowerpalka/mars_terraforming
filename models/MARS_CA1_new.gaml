@@ -14,9 +14,18 @@ global {
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 						//Present day martian solar constant
-        float moving_percentage_of_gas <- 0.01;
-	float opening_angle <- 60.0;
+    float moving_percentage_of_gas <- 0.01;
+    float opening_angle <- 60.0;
 	string sollon_number <- 0;
+    int model_number <- 0;
+    
+    float b0 -> -0.04051304926747448;
+	float b1 -> 1.59819953e-02;
+	float b2 -> -1.20888544e-02; 
+	float b3 -> -6.26106713e-05;
+	float b4 -> -7.87344857e-05; 
+	float b5 -> 9.47135571e-05;
+        
 	init {
 		create cell from: csv_file("../includes/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
     	[   id_cell::int(read("id")),x::int(read("x")),y::int(read("y")),z::int(read("z")),     	
@@ -41,6 +50,7 @@ global {
 	   		n2_column::float(read("ex58")),
     		albedo::float(read("ex33"))
     		] {
+			next_step_co2_column <- co2_column;
     			albedo <- 20.0;
 				int ntmp;
 				int atmp; 
@@ -86,7 +96,7 @@ global {
     
     reflex saving_ {    	
     	loop n over: cell {
-    	    save [ n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT] to: "../results/sol" + sollon_number + "/save_csv_" + cycle + ".csv" rewrite: false type: "csv";
+    	    save [ n.id_cell, n.x, n.y, n.z, n.n1, n.n2, n.n3, n.n4, n.n5, n.n6, n.a1, n.a2, n.a3, n.a4, n.a5, n.a6, n.temp, n.longitude, n.latitude, n.zonal_wind, n.merid_wind, n.atm_press, n.spec, n.co2_column, n.next_step_co2_column, n.n2_column, n.Tb, n.tH2O, n.Rh, n.Rgas, n.Lheat, n.P0, n.regolith, n.pole, n.Pr, n.totCO2, n.Td, n.S, n.albedo, n.pCO2, n.pN2, n.pCH4, n.pNH3, n.pCFC, n.ppH2O, n.Tp, n.Tt, n.Ts, n.C, n.dT] to: "../results/new_model/sol" + sollon_number + "/save_csv_" + cycle + ".csv" rewrite: false type: "csv";
    	 	}	
    	 }
     
@@ -164,7 +174,15 @@ species cell {
 	}
 	
 	action next_step {
-		do move_gas;
+		if model_number = 0
+		{
+			do move_gas;
+		}
+		else if model_number = 1
+		{
+			do move_gas_regression;
+		}
+		
 	}
 
 	
@@ -268,6 +286,25 @@ species cell {
 				}
 			}
 			
+		}
+	}
+	
+	action move_gas_regression
+	{
+		float dw <- atan2( zonal_wind, merid_wind ) * 180 / 3.14;
+		float xs <- sqrt( zonal_wind^2 + merid_wind^2 );
+		
+		loop i from: 0 to: length(neighbours)-1
+		{
+			float xa <- min( ( azim[i] - dw) mod 360, 360 - ( azim[i] - dw ) mod 360 );
+			
+			float delta_co2_column <- 1/6*(b0 + b1*xa + b2*xs + b3*xa^2 + b4*xa*xs + b5*xs^2);
+			
+			next_step_co2_column <- next_step_co2_column - delta_co2_column;
+			
+			ask neighbours[i] {
+				next_step_co2_column <- next_step_co2_column + delta_co2_column;
+			}
 		}
 	}
     	
@@ -411,6 +448,7 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0;
 	parameter "Rozwarcie stożka wiatru" var: opening_angle min: 0.0 max: 360.0;
 	parameter "Sollon startowy" var: sollon_number min: 0 max: 100;
+	parameter "Numer modelu" var: model_number min: 0;
 	
 	output {
 		display mars type: opengl ambient_light: 100
