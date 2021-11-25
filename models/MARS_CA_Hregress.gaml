@@ -173,7 +173,7 @@ global {
      * save data every year
      */
     reflex saving_ when: cycle > 1 and (
-    	cycle mod 1336 = 0 or (cycle / 2) mod 167 = 0
+    	cycle mod 1336 = 0 //or (cycle / 2) mod 167 = 0
     	) {    	
     	loop n over: cell {
     	    save [ 
@@ -326,6 +326,15 @@ species cell {
 			]);
     	}
 	}
+	
+	reflex count_height_diff when: cycle = 0 {
+		height_diff <- 0.0;
+		loop n over: neighbours {
+			height_diff <-  height_diff + (n.height - height);
+		}
+		height_diff <- height_diff * ((1-spec)/6.0 + spec/5.0);
+	}
+	
   
 	reflex finite_element when: cycle > 0 and cycle mod 2 = 1 and model_number = 3
 	{
@@ -364,17 +373,14 @@ species cell {
 			float neigh_nh3_sum <- 0;
 			float neigh_ch4_sum <- 0; 
 			
-			height_diff <- 0.0;
 			
 			loop n over: neighbours {
 				neigh_co2_sum <- neigh_co2_sum + n.co2_column;
 				neigh_cfc_sum <- neigh_cfc_sum + n.cfc_column;
 				neigh_ch4_sum <- neigh_ch4_sum + n.ch4_column;
 				neigh_nh3_sum <- neigh_nh3_sum + n.nh3_column;
-				height_diff <-  height_diff + (n.height - height);
 			}
 			
-			height_diff <- height_diff * ((1-spec)/6.0 + spec/5.0);
 		
 			next_step_co2_column <- -(beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column) + K_* (param*neigh_co2_sum - 4*co2_column) + co2_column;
 			nextstep_cfc_column <- -(beta_dw / delta_h)*(neighbours[beta_az].cfc_column - cfc_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].cfc_column - cfc_column) + K_CFC_* (param*neigh_cfc_sum - 4*cfc_column) + cfc_column;
