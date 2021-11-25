@@ -35,15 +35,6 @@ global {
     float ch4_abrupt_increase <- 0.0;		// pressure of nh3 increased every iter
     float cfc_abrupt_increase <- 0.0;		// pressure of nh3 increased every iter
     
-    
-    
-    float b0 -> -0.04051304926747448;
-	float b1 -> 1.59819953e-02;
-	float b2 -> -1.20888544e-02; 
-	float b3 -> -6.26106713e-05;
-	float b4 -> -7.87344857e-05; 
-	float b5 -> 9.47135571e-05;
-	
 	string outdir <- "../results/";
 	
 	float Rh <- 0.7; // Relative humidity
@@ -65,8 +56,6 @@ global {
 	float eddyDiffParam_cfc <- 1000.0;	// Eddy diffusion parameter [m2s-1] (approx.)
 	float eddyDiffParam_ch4 <- 1000.0;	// Eddy diffusion parameter [m2s-1] (approx.)
 	float eddyDiffParam_nh3 <- 1000.0;	// Eddy diffusion parameter [m2s-1] (approx.)
-	
-	
 	
 	float delta_t <- 88775.0;		// 1 martian sol [s]
 	
@@ -94,8 +83,7 @@ global {
 	
 	file csv_co2_mat <- csv_file("../includes/matrix-0-360-extvar_66.csv", ";", float, true);
 	matrix<float> mat_co2 <- matrix<float>(csv_co2_mat.contents);
-	
-    
+	    
     int sol_year <- 0 update: (cycle/2) mod martianYear;
     int sol_lon  <- 0 update: int(sol_year / 668.0 * 360.0);
     
@@ -393,13 +381,12 @@ species cell {
 			nextstep_ch4_column <- -(beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) + K_CH4_* (param*neigh_ch4_sum - 4*ch4_column) + ch4_column;
 			nextstep_nh3_column <- -(beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) + K_NH3_* (param*neigh_nh3_sum - 4*nh3_column) + nh3_column;
 			
-			if (height_diff_include = 1 and cycle > 2){
-				//next_step_co2_column <- next_step_co2_column + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );
+			if (height_diff_include = 1 and cycle > 2 and co2_fct_mat[(cycle/2) mod 668] != nil){
 				next_step_co2_column <- next_step_co2_column -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
 			}
 			/*
 			if (nh3_column > 0){
-				nextstep_nh3_column  <- nextstep_nh3_column  + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
+				nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
 			}
 			if (ch4_column > 0){
 				nextstep_ch4_column  <- nextstep_ch4_column  + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
@@ -543,26 +530,26 @@ experiment main_experiment until: (cycle <= 100)
 {
 	parameter "Procent gazu wywiewanego w pojedynczym cylku z hexa" var: moving_percentage_of_gas  min: 0.0 max: 1.0;
 	parameter "Rozwarcie stożka wiatru" var: opening_angle min: 0.0 max: 360.0;
-	parameter "Sollon startowy" var: sollon_number min: 0 max: 45;
-	parameter "Numer modelu" var: model_number min: 3;
-	parameter "Uwzględnienie różnicy wysokości" var: height_diff_include min: 0 max: 1;
-	parameter "Model cieplarniany" var: green_mode min: 0 max: 5;
-	parameter "Wariant badawczy" var: impact_model min: 0 max: 3;
-	parameter "Tryb wyświetlania: 1[co2], 2[temp]" var: aspect_mode min: 1 max: 3;
+	parameter "Start sollon" var: sollon_number min: 0 max: 45;
+	parameter "Gas transport model" var: model_number min: 3;
+	parameter "Height regression include" var: height_diff_include min: 0 max: 1;
+	parameter "Greenhouse model" var: green_mode min: 0 max: 5;
+	parameter "Incident model no" var: impact_model min: 0 max: 3;
+	parameter "Aspect number: 1[co2], 2[temp]" var: aspect_mode min: 1 max: 3;
 	
-	parameter "Komórka w której było wydarzenie" var: cell_affected;
-	parameter "Moment (cycle) w którym było wydarzenie" var: effect_time;
+	parameter "Cell affected by incident (important only when incident model = 2)" var: cell_affected;
+	parameter "Cycle no of the incident (important only when incident model = 2)" var: effect_time;
 	
 	
-	parameter "NH3 staly wzrost" var: nh3_const_increase;
-	parameter "CH4 staly wzrost" var: ch4_const_increase;
-	parameter "CFC staly wzrost" var: cfc_const_increase;
+	parameter "NH3 constant increase (important only when incident model = 1)" var: nh3_const_increase;
+	parameter "CH4 constant increase (important only when incident model = 1)" var: ch4_const_increase;
+	parameter "CFC constant increase (important only when incident model = 1)" var: cfc_const_increase;
 	
-	parameter "NH3 nagły wzrost" var: nh3_abrupt_increase;
-	parameter "CH4 nagły wzrost" var: ch4_abrupt_increase;
-	parameter "CFC nagły wzrost" var: cfc_abrupt_increase;
+	parameter "NH3 abrupt increase (important only when incident model = 2)" var: nh3_abrupt_increase;
+	parameter "CH4 abrupt increase (important only when incident model = 2" var: ch4_abrupt_increase;
+	parameter "CFC abrupt increase (important only when incident model = 2" var: cfc_abrupt_increase;
 	
-	parameter "Katalog na wyniki" var: outdir;
+	parameter "Folder for result" var: outdir;
 	
 	
 	output {
