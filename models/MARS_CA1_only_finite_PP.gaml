@@ -41,7 +41,7 @@ global {
 	float b4 -> -7.87344857e-05; 
 	float b5 -> 9.47135571e-05;
 	
-
+	string outdir <- "../results/";
 	
 	float Rh <- 0.7; // Relative humidity
     float Rgas <- 8.314; // Gas constant for water
@@ -89,6 +89,8 @@ global {
     file csv_solmars_dist <- csv_file("../includes/mars_sol_distance.csv", ";", float, true);
 	matrix<float> mat_solmars_dist <- matrix<float>(csv_solmars_dist.contents);
     
+    int sol_year <- 0 update: (cycle/2) mod martianYear;
+    int sol_lon  <- 0 update: int(sol_year / 668.0 * 360.0); 
     
 	init {
 		create cell from: csv_file("../includes/fixed/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
@@ -166,11 +168,14 @@ global {
     		}
     }
     
+    /**
+     * save data every year
+     */
     reflex saving_ when: cycle > 1 and cycle mod 1336 = 0 {    	
     	loop n over: cell {
     	    save [ 
-    	    	n.id_cell, n.co2_column, n.temp, n.Ts
-    	    ] to: "../results/5years/year_" + ( cycle / 1336 )  + ".csv" rewrite: false type: "csv";
+    	    	n.id_cell, n.co2_column, n.nh3_column, n.ch4_column, n.cfc_column, n.temp, n.Ts
+    	    ] to: outdir + "/year_" + ( cycle / 1336 )  + ".csv" rewrite: false type: "csv";
    	}
     }
 }
@@ -254,6 +259,8 @@ species cell {
 	
 	float Ts;					// calculated mars surface temperature
 	float prevTs;				// to keep the temperature from the previous step
+	
+	float height_diff <- 0.0;
 	
 
 	list<int> neigh <- list_with(6,0);
@@ -455,7 +462,7 @@ species cell {
 			float neigh_nh3_sum <- 0;
 			float neigh_ch4_sum <- 0; 
 			
-			float height_diff <- 0.0;
+			height_diff <- 0.0;
 			
 			loop n over: neighbours {
 				neigh_co2_sum <- neigh_co2_sum + n.co2_column;
@@ -472,11 +479,20 @@ species cell {
 			nextstep_ch4_column <- -(beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) + K_CH4_* (param*neigh_ch4_sum - 4*ch4_column) + ch4_column;
 			nextstep_nh3_column <- -(beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) + K_NH3_* (param*neigh_nh3_sum - 4*nh3_column) + nh3_column;
 			
+			if (height_diff_include = 1){
+				next_step_co2_column <- next_step_co2_column + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
+			}
+			/*
+			if (nh3_column > 0){
+				nextstep_nh3_column  <- nextstep_nh3_column  + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
+			}
+			if (ch4_column > 0){
+				nextstep_ch4_column  <- nextstep_ch4_column  + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
+			}
+			if (cfc_column > 0){
+				nextstep_cfc_column  <- nextstep_cfc_column  + (height_diff * mat_hr[0,sol_lon] + mat_hr[1,sol_lon] );	
+			}*/
 			
-			next_step_co2_column <- next_step_co2_column + (height_diff * 0.00705 + mat_hr[int(cycle/2)] );
-			nextstep_nh3_column <- nextstep_nh3_column + (height_diff * 0.00705 + mat_hr[int(cycle/2)] );
-			nextstep_ch4_column <- nextstep_ch4_column + (height_diff * 0.00705 + mat_hr[int(cycle/2)] );
-			nextstep_cfc_column <- nextstep_cfc_column + (height_diff * 0.00705 + mat_hr[int(cycle/2)] );
 		}
 	}
 	
@@ -557,10 +573,8 @@ species cell {
 	 */
 	reflex greenhouse_5 when: cycle > 1 and cycle mod 2 = 0 and green_mode = 5 {
 		prevTs <- Ts;
-		Ts <- sunTemperature * sqrt(0.5 * sunRadius / (mat_solmars_dist[int(cycle/2)] * AU)) * (1.0 - albedo);
-		
+		Ts <- sunTemperature * sqrt(0.5 * sunRadius / (mat_solmars_dist[sol_lon] * AU)) * (1.0 - albedo);
 		//Ts <- sunTemperature * sqrt(0.5 * sunRadius / (sunMarsDist * AU)) * (1.0 - albedo);
-		//Ts <- sunTemperature * sqrt(0.5 * sunRadius / (1.557781  * 149597870700)) * (100.0 - albedo) / 100.0;
 		
 		pCO2  <- co2_column * ga / Pa2bar; // [bar] 	
 		ppH2O <- (h20_column + h20ice_column) * ga / Pa2bar;
@@ -580,11 +594,15 @@ species cell {
 		Ts <- Ts + thermFluxToSpace * 0.209982289 - 13.16459818;
 	}
 	
+	/**
+	 * Incident: greenhouse gas factory
+	 * every sol the amount of gas increases in cell "cell_affected"
+	 */
 	reflex GHGfactory when: cycle > 1 and cycle mod 2 = 0 and impact_model = 1 {
 		if (id_cell = cell_affected){
-			nh3_column <- nh3_column + nh3_const_increase; 
-			ch4_column <- ch4_column + ch4_const_increase; 
-			cfc_column <- cfc_column + cfc_const_increase; 
+			nh3_column <- nh3_column + nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
+			ch4_column <- ch4_column + ch4_const_increase / delta_h2; 
+			cfc_column <- cfc_column + cfc_const_increase / delta_h2; 
 		}
 	}
 	reflex AsteroidImpact when: cycle =  effect_time and impact_model = 2 {
@@ -595,9 +613,9 @@ species cell {
 		 * 1000 [u bar] = 1000 * 10e-6 [bar] = 10e-3 [bar] = 10e-3 * 10e5 [Pa] = 10e2 [Pa]
 		 */
 		 if (id_cell = cell_affected){
-			nh3_column <- nh3_column + nh3_abrupt_increase;
-			ch4_column <- ch4_column + ch4_abrupt_increase;
-			cfc_column <- cfc_column + cfc_abrupt_increase;
+			nh3_column <- nh3_column + nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
+			ch4_column <- ch4_column + ch4_abrupt_increase / delta_h2;
+			cfc_column <- cfc_column + cfc_abrupt_increase / delta_h2;
 		}
 	}
 	
@@ -628,6 +646,8 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "NH3 nagły wzrost" var: nh3_abrupt_increase;
 	parameter "CH4 nagły wzrost" var: ch4_abrupt_increase;
 	parameter "CFC nagły wzrost" var: cfc_abrupt_increase;
+	
+	parameter "Katalog na wyniki" var: outdir;
 	
 	
 	output {
