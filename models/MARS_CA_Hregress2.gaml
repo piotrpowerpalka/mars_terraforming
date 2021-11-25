@@ -375,16 +375,17 @@ species cell {
 			
 			if (height_diff_include = 1 and co2_fct_mat[(cycle/2) mod 668] != nil) {
 				next_step_co2_column <- next_step_co2_column -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
+
+				nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
+				if (nextstep_nh3_column < 0) { nextstep_nh3_column <- 0.0; }	
+	
+				nextstep_ch4_column  <- nextstep_ch4_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
+				if (nextstep_ch4_column < 0) { nextstep_ch4_column <- 0.0; }	
+	
+				nextstep_cfc_column  <- nextstep_cfc_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
+				if (nextstep_cfc_column < 0) { nextstep_cfc_column <- 0.0; }					
 			}
-			nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
-			if (nextstep_nh3_column < 0) { nextstep_nh3_column <- 0.0; }	
-
-			nextstep_ch4_column  <- nextstep_ch4_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
-			if (nextstep_ch4_column < 0) { nextstep_ch4_column <- 0.0; }	
-
-			nextstep_cfc_column  <- nextstep_cfc_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
-			if (nextstep_cfc_column < 0) { nextstep_cfc_column <- 0.0; }	
-			
+						
 		}
 	}
 	
@@ -440,7 +441,7 @@ species cell {
 	 * Incident: greenhouse gas factory
 	 * every sol the amount of gas increases in cell "cell_affected"
 	 */
-	reflex GHGfactory when: cycle > 1 and cycle mod 2 = 0 and impact_model = 1 {
+	reflex GHGfactory when: cycle >  effect_time and cycle mod 2 = 0 and impact_model = 1 {
 		if (id_cell = cell_affected){
 			nh3_column <- nh3_column + nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
 			ch4_column <- ch4_column + ch4_const_increase / delta_h2; 
