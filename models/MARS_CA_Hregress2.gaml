@@ -20,6 +20,7 @@ global {
     int model_number <- 0;
     int height_diff_include <- 1;
     int numOfHexes <- 4002;
+    int logRegress <- 0;
     
     int cell_affected <- 1000; 				// cell affected by the effect
     int effect_time <- 30;					// cycle of the efect happened
@@ -177,7 +178,7 @@ global {
    		}
     }
     
-    reflex when: cycle > 1 and cycle mod 2 = 1 and cycle <= 1336 {
+    reflex Hregres when: cycle > 1 and cycle mod 2 = 1 and cycle <= 1336 {
     	int sollon <- int((cycle-1)/1336.0 * 360.0) mod 360;
     	int solno <- int((cycle-1)/2) mod 668;
     	
@@ -189,8 +190,14 @@ global {
 		co2_fct_mat[solno] <- build(instances);
 		
 		//write "learnt function: " + co2_regress_fct;
-		
     }
+    reflex log_regression when: logRegress = 1 and cycle = 1336 {
+    	loop n from: 0 to: 667 {
+    	    save [ 
+    	    	co2_fct_mat[n]
+    	    ] to: outdir + "/Hregression_fct.csv" rewrite: false type: "csv";
+   		}
+    } 
 }
 
 species cell {
@@ -376,16 +383,16 @@ species cell {
 			if (height_diff_include = 1 and co2_fct_mat[(cycle/2) mod 668] != nil) {
 				next_step_co2_column <- next_step_co2_column -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
 
-				nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
-				if (nextstep_nh3_column < 0) { nextstep_nh3_column <- 0.0; }	
-	
-				nextstep_ch4_column  <- nextstep_ch4_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
-				if (nextstep_ch4_column < 0) { nextstep_ch4_column <- 0.0; }	
-	
-				nextstep_cfc_column  <- nextstep_cfc_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
-				if (nextstep_cfc_column < 0) { nextstep_cfc_column <- 0.0; }					
+				if (nh3_column > 10){ // safety - for small amounts of gas - do not apply regression
+					nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
+				}
+				if (ch4_column > 10){ // safety - for small amounts of gas - do not apply regression
+					nextstep_ch4_column  <- nextstep_ch4_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);
+				}
+				if (cfc_column > 10){ // safety - for small amounts of gas - do not apply regression
+					nextstep_cfc_column  <- nextstep_cfc_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
+				}			
 			}
-						
 		}
 	}
 	
@@ -480,15 +487,16 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "Cycle no of the incident (important only when incident model = 2)" var: effect_time;
 	
 	
-	parameter "NH3 constant increase (important only when incident model = 1)" var: nh3_const_increase;
-	parameter "CH4 constant increase (important only when incident model = 1)" var: ch4_const_increase;
-	parameter "CFC constant increase (important only when incident model = 1)" var: cfc_const_increase;
+	parameter "NH3 constant increase (important only when incident model = 1) [kg]" var: nh3_const_increase;
+	parameter "CH4 constant increase (important only when incident model = 1) [kg]" var: ch4_const_increase;
+	parameter "CFC constant increase (important only when incident model = 1) [kg]" var: cfc_const_increase;
 	
-	parameter "NH3 abrupt increase (important only when incident model = 2)" var: nh3_abrupt_increase;
-	parameter "CH4 abrupt increase (important only when incident model = 2" var: ch4_abrupt_increase;
-	parameter "CFC abrupt increase (important only when incident model = 2" var: cfc_abrupt_increase;
+	parameter "NH3 abrupt increase (important only when incident model = 2) [kg]" var: nh3_abrupt_increase;
+	parameter "CH4 abrupt increase (important only when incident model = 2 [kg]" var: ch4_abrupt_increase;
+	parameter "CFC abrupt increase (important only when incident model = 2 [kg]" var: cfc_abrupt_increase;
 	
 	parameter "Folder for result" var: outdir;
+	parameter "Log regression function" var: logRegress min: 0 max: 1;
 	
 	
 	output {
