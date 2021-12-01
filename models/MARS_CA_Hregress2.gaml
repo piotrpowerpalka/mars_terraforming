@@ -22,7 +22,8 @@ global {
     int numOfHexes <- 4002;
     int logRegress <- 0;
     
-    int cell_affected <- 1000; 				// cell affected by the effect
+    string cells_affected <- "1000"; 				// cell affected by the effect
+    list<int> cells_aff;
     int effect_time <- 30;					// cycle of the efect happened
     int effect_stop <- 1336;
     
@@ -90,6 +91,7 @@ global {
 	matrix<float> instances <- 0.0 as_matrix {2, numOfHexes}; 
     
 	init {
+		cells_aff <- cells_affected split_with ";";
 		
 		create cell from: csv_file("../includes/fixed/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
     	[   id_cell::int(read("id")),
@@ -461,7 +463,7 @@ species cell {
 	 */
 	reflex GHGfactory when: cycle >  effect_time and cycle <= effect_stop
 	 and cycle mod 2 = 0 and impact_model = 1 {
-		if (id_cell = cell_affected){
+		if (id_cell in cells_aff){
 			div_nh3 <- nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
 			div_ch4 <- ch4_const_increase / delta_h2; 
 			div_cfc <- cfc_const_increase / delta_h2; 
@@ -475,7 +477,7 @@ species cell {
 		 *  Here, we estimate the ammonia opacity as (Kuhn et al., 1979)
 		 * 1000 [u bar] = 1000 * 10e-6 [bar] = 10e-3 [bar] = 10e-3 * 10e5 [Pa] = 10e2 [Pa]
 		 */
-		 if (id_cell = cell_affected){
+		 if (id_cell in cells_aff){
 			div_nh3 <- nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
 			div_ch4 <- ch4_abrupt_increase / delta_h2;
 			div_cfc <- cfc_abrupt_increase / delta_h2;
@@ -496,7 +498,7 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "Incident model no" var: impact_model min: 0 max: 3;
 	parameter "Aspect number: 1[co2], 2[temp]" var: aspect_mode min: 1 max: 3;
 	
-	parameter "Cell affected by incident (important only when incident model = 2)" var: cell_affected;
+	parameter "Cells affected by incident (important only when incident model = 2)" var: cells_affected;
 	parameter "Cycle no of the incident (important only when incident model = 2)" var: effect_time;
 	parameter "Cycle no of the incident stop (important only when incident model = 2)" var: effect_stop;
 	
