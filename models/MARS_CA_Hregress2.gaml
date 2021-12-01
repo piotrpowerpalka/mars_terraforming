@@ -402,6 +402,11 @@ species cell {
 					nextstep_cfc_column  <- nextstep_cfc_column  - predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
 				}			
 			}
+			
+			if (nextstep_nh3_column < 0.0) { nextstep_nh3_column <- 0.0; }
+			if (nextstep_ch4_column < 0.0) { nextstep_ch4_column <- 0.0; }
+			if (nextstep_cfc_column < 0.0) { nextstep_cfc_column <- 0.0; }
+			 
 		}
 		div_co2 <- 0.0;
 		div_nh3 <- 0.0;
