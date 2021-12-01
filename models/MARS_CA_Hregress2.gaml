@@ -22,6 +22,7 @@ global {
     int numOfHexes <- 4002;
     int logRegress <- 0;
     
+    
     string cells_affected <- "1000"; 				// cell affected by the effect
     list<int> cells_aff;
     int effect_time <- 30;					// cycle of the efect happened
@@ -89,6 +90,11 @@ global {
     
     list<regression> co2_fct_mat <- list_with(668, nil);
 	matrix<float> instances <- 0.0 as_matrix {2, numOfHexes}; 
+	
+	float mean_greenhouse_temp <- 0.0;  // mean greenhouse temperature
+	float var_greenhouse_temp <- 0.0;
+	int biol_habitable_hex <- 0;		// number of hexes biologically habitable (T > -25 C)
+	int biosphere_hex <- 0; 			// number of hexes unfreezed water (T > 0 C)
     
 	init {
 		cells_aff <- cells_affected split_with ";";
@@ -548,5 +554,11 @@ experiment main_experiment until: (cycle <= 100)
 		{
 			species cell aspect: plain_Ts;
 		}		
+		
+		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
+		monitor "Varianve of MARS greenhouse temperature"            name: var_greenhouse_temp value: cell variance_of(each.Ts);
+		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
+		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
+
 	}
 }
