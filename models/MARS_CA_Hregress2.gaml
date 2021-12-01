@@ -24,6 +24,7 @@ global {
     
     int cell_affected <- 1000; 				// cell affected by the effect
     int effect_time <- 30;					// cycle of the efect happened
+    int effect_stop <- 1336;
     
     float nh3_const_increase <- 0.0;		// pressure of nh3 increased every iter
     float ch4_const_increase <- 0.0;		// pressure of nh3 increased every iter
@@ -244,7 +245,11 @@ species cell {
  	float nextstep_nh3_column;
  	float nextstep_ch4_column;
  	
-	
+ 	float div_co2 <- 0.0;
+ 	float div_nh3 <- 0.0;
+ 	float div_ch4 <- 0.0;
+ 	float div_cfc <- 0.0;
+ 		
 	float co2_atmpres_share;
 	float n2_atmpres_share;
 	
@@ -375,10 +380,12 @@ species cell {
 				neigh_ch4_sum <- neigh_ch4_sum + n.ch4_column;
 				neigh_nh3_sum <- neigh_nh3_sum + n.nh3_column;
 			}
-			next_step_co2_column <- -(beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column) + K_* (param*neigh_co2_sum - 4*co2_column) + co2_column;
-			nextstep_cfc_column <- -(beta_dw / delta_h)*(neighbours[beta_az].cfc_column - cfc_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].cfc_column - cfc_column) + K_CFC_* (param*neigh_cfc_sum - 4*cfc_column) + cfc_column;
-			nextstep_ch4_column <- -(beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) + K_CH4_* (param*neigh_ch4_sum - 4*ch4_column) + ch4_column;
-			nextstep_nh3_column <- -(beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) + K_NH3_* (param*neigh_nh3_sum - 4*nh3_column) + nh3_column;
+			next_step_co2_column <- div_co2 -(beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column) + K_* (param*neigh_co2_sum - 4*co2_column) + co2_column;
+			nextstep_cfc_column  <- div_cfc -(beta_dw / delta_h)*(neighbours[beta_az].cfc_column - cfc_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].cfc_column - cfc_column) + K_CFC_* (param*neigh_cfc_sum - 4*cfc_column) + cfc_column;
+			nextstep_ch4_column  <- div_ch4 -(beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) + K_CH4_* (param*neigh_ch4_sum - 4*ch4_column) + ch4_column;
+			nextstep_nh3_column  <- div_nh3 -(beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) + K_NH3_* (param*neigh_nh3_sum - 4*nh3_column) + nh3_column;
+			
+
 			
 			if (height_diff_include = 1 and co2_fct_mat[(cycle/2) mod 668] != nil) {
 				next_step_co2_column <- next_step_co2_column -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
@@ -394,6 +401,10 @@ species cell {
 				}			
 			}
 		}
+		div_co2 <- 0.0;
+		div_nh3 <- 0.0;
+		div_cfc <- 0.0;
+		div_ch4 <- 0.0;
 	}
 	
 	int find_azim_hex_index( float azim_ )
@@ -448,12 +459,14 @@ species cell {
 	 * Incident: greenhouse gas factory
 	 * every sol the amount of gas increases in cell "cell_affected"
 	 */
-	reflex GHGfactory when: cycle >  effect_time and cycle mod 2 = 0 and impact_model = 1 {
+	reflex GHGfactory when: cycle >  effect_time and cycle <= effect_stop
+	 and cycle mod 2 = 0 and impact_model = 1 {
 		if (id_cell = cell_affected){
-			nh3_column <- nh3_column + nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
-			ch4_column <- ch4_column + ch4_const_increase / delta_h2; 
-			cfc_column <- cfc_column + cfc_const_increase / delta_h2; 
+			div_nh3 <- nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
+			div_ch4 <- ch4_const_increase / delta_h2; 
+			div_cfc <- cfc_const_increase / delta_h2; 
 		}
+		
 	}
 	reflex AsteroidImpact when: cycle =  effect_time and impact_model = 2 {
 		/**
@@ -463,9 +476,9 @@ species cell {
 		 * 1000 [u bar] = 1000 * 10e-6 [bar] = 10e-3 [bar] = 10e-3 * 10e5 [Pa] = 10e2 [Pa]
 		 */
 		 if (id_cell = cell_affected){
-			nh3_column <- nh3_column + nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
-			ch4_column <- ch4_column + ch4_abrupt_increase / delta_h2;
-			cfc_column <- cfc_column + cfc_abrupt_increase / delta_h2;
+			div_nh3 <- nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
+			div_ch4 <- ch4_abrupt_increase / delta_h2;
+			div_cfc <- cfc_abrupt_increase / delta_h2;
 		}
 	}
 	
@@ -485,6 +498,7 @@ experiment main_experiment until: (cycle <= 100)
 	
 	parameter "Cell affected by incident (important only when incident model = 2)" var: cell_affected;
 	parameter "Cycle no of the incident (important only when incident model = 2)" var: effect_time;
+	parameter "Cycle no of the incident stop (important only when incident model = 2)" var: effect_stop;
 	
 	
 	parameter "NH3 constant increase (important only when incident model = 1) [kg]" var: nh3_const_increase;
