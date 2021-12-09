@@ -24,12 +24,13 @@ global {
     int numOfHexes <- 4002;
     int logRegress <- 0;
     float Td <- 30.0; // Temperature increment to outgas 1/e of regolith
+    float Tincrease <- 0.0;
     
     
-    string cells_affected <- "1000"; 				// cell affected by the effect
+    string cells_affected <- ""; 				// cell affected by the effect
     list<int> cells_aff;
-    int effect_time <- 30;					// cycle of the efect happened
-    int effect_stop <- 1336;
+    list<int> effect_time;					// cycle of the efect happened
+    list<int> effect_stop;
     
     float nh3_const_increase <- 0.0;		// pressure of nh3 increased every iter
     float ch4_const_increase <- 0.0;		// pressure of nh3 increased every iter
@@ -104,7 +105,30 @@ global {
     float C <- regolith * 0.006^(-0.275) * exp(149 / Td); //Normalization constant for regolith calculations, from McKay and Fogg
     
 	init {
-		cells_aff <- cells_affected split_with ";";
+		/**
+		 * read arguments: 
+		 * formats:
+		 * 1528 -- a cell_id affected
+		 * 1528;1224;1000 - cells affected
+		 * 1528:668-1336 -  a cell affected with a starting and ending incident times
+		 * 1528:668-1336;2000:1000-1500 - list of cells affected with a list of starting and ending times
+		 */
+		 write cells_affected;
+		list<string> incidents <- cells_affected split_with ";";
+		loop incident over: incidents {
+			list<string> cellmom <- incident split_with ":";
+			if (length(cellmom) > 1) {
+				list<string> effect_se_times <- cellmom[1] split_with "-";
+				effect_time <<+ int(effect_se_times[0]);
+				effect_stop  <<+ int(effect_se_times[1]);
+			}
+			cells_aff<<+ int(cellmom[0]);
+		}
+		write cells_aff;
+		write effect_time;
+		write effect_stop;
+		
+		//cells_aff <- cells_affected split_with ";";
 		
 		create cell from: csv_file("../includes/fixed/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
     	[   id_cell::int(read("id")),
@@ -218,7 +242,7 @@ global {
     } 
 }
 
-species cell {
+species cell parallel: true {
 	list<cell> neighbours;
 	
 	int id_cell;
@@ -266,7 +290,8 @@ species cell {
  	float div_nh3 <- 0.0;
  	float div_ch4 <- 0.0;
  	float div_cfc <- 0.0;
- 		
+ 	float div_Ts <- 0.0;
+ 	
 	float co2_atmpres_share;
 	float n2_atmpres_share;
 	
@@ -479,105 +504,121 @@ species cell {
 			Ts <- Ts + albedo * 100.0 * 2.062852087 - 41.02245772;
 			Ts <- Ts + thermFluxToSpace * 0.209982289 - 13.16459818;
 		}
-	}
-	
-	/**
-	 * CO2 melting and regolith outgasing
-	 * based on McKay and Fogg application, and Zubrin 19993 paper
-	 */
-	reflex CO2melting when: cycle > 0 and cycle mod 2 = 0 {
-		float Pv <- 1.23e7 * exp(-3168.0 / Ts); //[bar] za Zubrin, McKay 1993
-		float Pa <- co2_column * ga / Pa2bar;   // [bar]
-		float Pr <- 1000 * ga / Pa2bar; // [bar]
-		
-		float X;
-		float Y;
-		float top;
-		float bottom <- 0.0;
-		
-		 	
-		if ( (Pv > Pa and frozenCO2 > 0.0 and Pv < Pa + frozenCO2) ) {
-			Pa <- Pv;
-			frozenCO2 <- frozenCO2 - (Pv - Pa);
-		}
-		else if (Pv > Pa + frozenCO2 and frozenCO2 > 0.0) {
-            Pa <- Pa + frozenCO2;
-            frozenCO2 <- 0.0;
-        }
-        else if (Pv < Pa) {
-        	frozenCO2 <- frozenCO2 + (Pa - Pv);
-        	Pa <- Pv;
-        }
-		
-         
-        X <- Pa + Pr;
-        Y <- C * exp(- Ts/Td);
-        
-        top <- X;
-        
-        if  (regolithCO2inv > 0.0){
-        	Pa <- 0.5 * regolithCO2inv;
-	        // Calculation of Pr by bisection method
-	        
-	        loop times: 50 {
-	            if (Y * Pa^0.275 + Pa < X){                
-	                bottom <- Pa;
-	            } else {
-	            	top <- Pa;
-	            }
-	            Pa <- bottom + (top - bottom) / 2;
-	            if (top - bottom < 1e-4) { break; }
-	        }
-	        
-	        if (Y * Pa^0.275 < regolithCO2inv ){
-	        	regolithCO2inv <- regolithCO2inv - Y * Pa^0.275;
-	        	Pa <- Pa + Y * Pa^0.275;
-	        } else {
-	        	Pa <- Pa + regolithCO2inv;
-	        	regolithCO2inv <- 0.0;
-	        }
-	        write "[" + id_cell + "], Pa = " + Pa + ", regolith = " + regolithCO2inv;
-        	
-        }
-        
-        div_co2 <- co2_column - Pa / ga * Pa2bar;
-        
-        
+		Ts <- Ts + div_Ts;
+		div_Ts <- 0.0;
 	}
 	
 	/**
 	 * Incident: greenhouse gas factory
 	 * every sol the amount of gas increases in cell "cell_affected"
 	 */
-	reflex GHGfactory when: cycle >  effect_time and cycle <= effect_stop
-	 and cycle mod 2 = 0 and impact_model = 1 {
-		if (id_cell in cells_aff){
-			div_nh3 <- nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
-			div_ch4 <- ch4_const_increase / delta_h2; 
-			div_cfc <- cfc_const_increase / delta_h2; 
+	reflex GHGfactory when: cycle > 0 and cycle mod 2 = 0 and impact_model = 1 {
+		loop i from: 0 to: length(cells_aff) - 1{
+			if (cycle >= effect_time[i] and cycle <= effect_stop[i] and id_cell = cells_aff[i]){ 
+				div_nh3 <- nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
+				div_ch4 <- ch4_const_increase / delta_h2; 
+				div_cfc <- cfc_const_increase / delta_h2; 				
+			}
 		}
-		
 	}
-	reflex AsteroidImpact when: cycle =  effect_time and impact_model = 2 {
+	reflex AsteroidImpact when: cycle > 0 and cycle mod 2 = 0 and impact_model = 2 {
 		/**
 		 * Ammonia might be produced on Mars biologically; 
 		 * Zubrin has also proposed importing 1 - 1000 u bars of ammonia via comet impacts (Zubrin and McKay, 1997).
 		 *  Here, we estimate the ammonia opacity as (Kuhn et al., 1979)
 		 * 1000 [u bar] = 1000 * 10e-6 [bar] = 10e-3 [bar] = 10e-3 * 10e5 [Pa] = 10e2 [Pa]
 		 */
-		 if (id_cell in cells_aff){
+		loop i from: 0 to: length(cells_aff) - 1{
+			if (cycle = effect_time[i]  and id_cell = cells_aff[i]){ 
 			div_nh3 <- nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
 			div_ch4 <- ch4_abrupt_increase / delta_h2;
 			div_cfc <- cfc_abrupt_increase / delta_h2;
+			}
 		}
 	}
 	
 	reflex PoleMelting when: cycle > 1 and cycle mod 2 = 0 and impact_model = 3 {
+		loop i from: 0 to: length(cells_aff) - 1{
+			if (cycle >= effect_time[i] and cycle <= effect_stop[i] and id_cell = cells_aff[i]){ 
+				div_Ts <- 10.0;
+			}	
+		}
+	}
+	
+	/**
+	 * CO2 melting and regolith outgasing
+	 * based on McKay and Fogg application, and Zubrin 19993 paper
+	 * -393.5 kJ/mol - enthalpy carbon dioxide E0?
+	 */
+	reflex CO2melting when: cycle > 0 and cycle mod 2 = 0 {
+		loop i from: 0 to: length(cells_aff) - 1{
+			if (cycle >= effect_time[i] and cycle <= effect_stop[i] and id_cell = cells_aff[i]){ 
 		
+				float Pv <- 1.23e7 * exp(-3168.0 / Ts); //[bar] za Zubrin, McKay 1993
+				float Pa <- co2_column * ga / Pa2bar;   // [bar]
+				float Pr <- 1000 * ga / Pa2bar; // [bar]
+				float C <- 0.0;
+				
+				float X;
+				float Y;
+				float top;
+				float bottom <- 0.0;
+				
+				 	
+				if ( (Pv > Pa and frozenCO2 > 0.0 and Pv < Pa + frozenCO2) ) {
+					Pa <- Pv;
+					frozenCO2 <- frozenCO2 - (Pv - Pa);
+				}
+				else if (Pv > Pa + frozenCO2 and frozenCO2 > 0.0) {
+		            Pa <- Pa + frozenCO2;
+		            frozenCO2 <- 0.0;
+		        }
+		        else if (Pv < Pa) {
+		        	frozenCO2 <- frozenCO2 + (Pa - Pv);
+		        	Pa <- Pv;
+		        }
+				/*
+		         
+		        X <- Pa + Pr;
+		        //Y <- regolithCO2inv * 0.006^(-0.275) * exp(149 / Td) * exp(- Ts/Td);
+		        Y <- (regolithCO2inv * 0.006 * exp(- Ts/Td))^(1.0/0.275);
+		        
+		        write "["+id_cell+"]"+", Y = " + Y + ", Ts = " + Ts;
+		        
+		        top <- X;
+		        
+		        if  (regolithCO2inv > 0.0){
+		        	Pa <- 0.5 * regolithCO2inv;
+			        // Calculation of Pr by bisection method
+			        
+			        loop times: 50 {
+			            if (Y * Pa^0.275 + Pa < X){                
+			                bottom <- Pa;
+			            } else {
+			            	top <- Pa;
+			            }
+			            Pa <- bottom + (top - bottom) / 2;
+			            if (top - bottom < 1e-6) { break; }
+			        }
+			        
+			        if (Y * Pa^0.275 < regolithCO2inv ){
+			        	regolithCO2inv <- regolithCO2inv - Y * Pa^0.275;
+			        	Pa <- Pa + Y * Pa^0.275;
+			        } else {
+			        	Pa <- Pa + regolithCO2inv;
+			        	regolithCO2inv <- 0.0;
+			        }
+			        write "[" + id_cell + "], Pa = " + Pa + ", regolith = " + regolithCO2inv + ", co2_col mod = " + (co2_column - Pa / ga * Pa2bar);
+		        	
+		        }
+		        */
+		        div_co2 <- co2_column - Pa / ga * Pa2bar;    
+			}	
+		}
 	}
 }
 
-experiment main_experiment until: (cycle <= 100)
+experiment main_experiment until: (cycle <= 100) 
 {
 	
 	parameter "Start sollon" var: sollon_number min: 0 max: 45;
@@ -589,24 +630,24 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "Incident model no" var: impact_model min: 0 max: 3;
 	parameter "Aspect number: 1[co2], 2[temp]" var: aspect_mode min: 1 max: 3;
 	
-	parameter "Cells affected by incident (important only when incident model = 2)" var: cells_affected;
-	parameter "Cycle no of the incident (important only when incident model = 2)" var: effect_time;
-	parameter "Cycle no of the incident stop (important only when incident model = 2)" var: effect_stop;
-	
+	parameter "Cells affected by incident, and timing of incident" var: cells_affected;
 	
 	parameter "NH3 constant increase (important only when incident model = 1) [kg]" var: nh3_const_increase;
 	parameter "CH4 constant increase (important only when incident model = 1) [kg]" var: ch4_const_increase;
 	parameter "CFC constant increase (important only when incident model = 1) [kg]" var: cfc_const_increase;
 	
 	parameter "NH3 abrupt increase (important only when incident model = 2) [kg]" var: nh3_abrupt_increase;
-	parameter "CH4 abrupt increase (important only when incident model = 2 [kg]" var: ch4_abrupt_increase;
-	parameter "CFC abrupt increase (important only when incident model = 2 [kg]" var: cfc_abrupt_increase;
+	parameter "CH4 abrupt increase (important only when incident model = 2) [kg]" var: ch4_abrupt_increase;
+	parameter "CFC abrupt increase (important only when incident model = 2) [kg]" var: cfc_abrupt_increase;
+	
+	parameter "Temperature increase from warming (important only when incident model = 3 [K]" var: Tincrease;
 	
 	parameter "Folder for result" var: outdir;
 	parameter "Log regression function" var: logRegress min: 0 max: 1;
 	
 	
 	output {
+		/*
 		display mars_co2 type: opengl camera_interaction: true ambient_light: 100 
 		background: #black orthographic_projection: true rotate: 15.0 
 		{
@@ -634,7 +675,7 @@ experiment main_experiment until: (cycle <= 100)
 		{
 			species cell aspect: plain_Ts;
 		}		
-		
+		 */
 		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
 		monitor "Varianve of MARS greenhouse temperature"            name: var_greenhouse_temp value: cell variance_of(each.Ts);
 		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
