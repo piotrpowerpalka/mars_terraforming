@@ -25,6 +25,10 @@ global {
     int logRegress <- 0;
     float Td <- 30.0; // Temperature increment to outgas 1/e of regolith
     float Tincrease <- 0.0;
+    float GHGincParam <- 1.0001999993633;
+    int GHGregress <- 0;
+    
+    float prevTotalNH3 <- 0.0;
     
     
     string cells_affected <- ""; 				// cell affected by the effect
@@ -47,7 +51,7 @@ global {
     float Lheat <- 43655.0; // Latent heat (?)
     float P0 <- 1.4E6; //Reference pressure (ext(19)?)
     
-	
+	float sumNH3;
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 		//Present day martian solar constant [Wm-2]
@@ -211,7 +215,7 @@ global {
      * save data every year
      */
     reflex saving_ when: cycle > 1 and (
-    	cycle mod 1336 = 0 // or (cycle / 2) mod 167 = 0
+    	cycle mod 1336 = 1 // or (cycle / 2) mod 167 = 0
     	) {    	
     	loop n over: cell {
     	    save [ 
@@ -240,6 +244,24 @@ global {
     	    ] to: outdir + "/Hregression_fct.csv" rewrite: false type: "csv";
    		}
     } 
+    
+/*   reflex calculate_gas when: cycle mod 2 = 0 {
+    	float totalNH3 <- 0.0;
+    	float totalDivNH3 <- 0.0;
+    	
+    	
+    	loop n over: cell {
+    		totalNH3 <- totalNH3 + n.nh3_column;	
+    		totalDivNH3 <- totalDivNH3 + n.div_nh3;
+    	}
+    	GHGincParam <- 1.0;
+    	//if (totalNH3 > 0.0){
+	    //	GHGincParam <- (prevTotalNH3 + totalDivNH3)/totalNH3;
+    	//}
+    	if (totalDivNH3 = 0 and totalNH3 > 0){
+    		GHGincParam <- prevTotalNH3/totalNH3;
+    	}
+    }*/
 }
 
 species cell parallel: true {
@@ -401,6 +423,25 @@ species cell parallel: true {
 		float alfa <- azim[alfa_az];
 		float beta  <- azim[beta_az];
 		
+		/// liczymy też w drugą stronę - co jest wwiewane
+		
+		float a_dw <- atan2( -zonal_wind, -merid_wind ); // * 180 / 3.14;
+		int a_beta_az <- length(azim)-1;
+		loop a_az_index from: 0 to: length(azim) - 2 
+		{
+			if( azim[a_az_index] < a_dw and azim[a_az_index + 1] >  a_dw )
+			{
+				a_beta_az <- a_az_index;
+			}
+		}
+		
+		int a_alfa_az <- (a_beta_az+1) mod (length(azim)-1);
+		
+		float a_alfa <- azim[a_alfa_az];
+		float a_beta  <- azim[a_beta_az];
+		
+		
+		
 		float param <- (1-spec) * 4.0/6.0 + spec * 4.0/5.0; // jezeli spec to 4/5 inaczej 2/3
 
 		if( alfa = beta ){
@@ -411,11 +452,17 @@ species cell parallel: true {
 		} else {
 			float alfa_dw <- zonal_wind * (sin(beta) - cos(beta)) / sin(beta - alfa);
 			float beta_dw <- merid_wind * (cos(alfa) - sin(alfa)) / sin(beta - alfa);
+			
+			// i w druga strone
+			
+			float a_alfa_dw <- -zonal_wind * (sin(a_beta) - cos(a_beta)) / sin(a_beta - a_alfa);
+			float a_beta_dw <- -merid_wind * (cos(a_alfa) - sin(a_alfa)) / sin(a_beta - a_alfa);
+			
 		
-			float neigh_co2_sum <- 0;
-			float neigh_cfc_sum <- 0;
-			float neigh_nh3_sum <- 0;
-			float neigh_ch4_sum <- 0; 
+			float neigh_co2_sum <- 0.0;
+			float neigh_cfc_sum <- 0.0;
+			float neigh_nh3_sum <- 0.0;
+			float neigh_ch4_sum <- 0.0; 
 			
 			loop n over: neighbours {
 				neigh_co2_sum <- neigh_co2_sum + n.co2_column;
@@ -423,16 +470,45 @@ species cell parallel: true {
 				neigh_ch4_sum <- neigh_ch4_sum + n.ch4_column;
 				neigh_nh3_sum <- neigh_nh3_sum + n.nh3_column;
 			}
-			next_step_co2_column <- div_co2 -(beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column) + K_* (param*neigh_co2_sum - 4*co2_column) + co2_column;
-			nextstep_cfc_column  <- div_cfc -(beta_dw / delta_h)*(neighbours[beta_az].cfc_column - cfc_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].cfc_column - cfc_column) + K_CFC_* (param*neigh_cfc_sum - 4*cfc_column) + cfc_column;
-			nextstep_ch4_column  <- div_ch4 -(beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) + K_CH4_* (param*neigh_ch4_sum - 4*ch4_column) + ch4_column;
-			nextstep_nh3_column  <- div_nh3 -(beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) + K_NH3_* (param*neigh_nh3_sum - 4*nh3_column) + nh3_column;
+			next_step_co2_column <- div_co2  
+								  - (beta_dw / delta_h)*(neighbours[beta_az].co2_column - co2_column)  
+							      - (alfa_dw / delta_h)*(neighbours[alfa_az].co2_column - co2_column)  
+							      - (a_beta_dw / delta_h)*(neighbours[a_beta_az].co2_column - co2_column)  
+							      - (a_alfa_dw / delta_h)*(neighbours[a_alfa_az].co2_column - co2_column)  
+							      
+							  	  + K_*     (param * neigh_co2_sum - 4.0 * co2_column)  
+								  + co2_column;
+			nextstep_cfc_column  <- div_cfc 
+								  - (beta_dw / delta_h)*(neighbours[beta_az].cfc_column - cfc_column) 
+								  - (alfa_dw / delta_h)*(neighbours[alfa_az].cfc_column - cfc_column) 
+							      - (a_beta_dw / delta_h)*(neighbours[a_beta_az].cfc_column - cfc_column)  
+							      - (a_alfa_dw / delta_h)*(neighbours[a_alfa_az].cfc_column - cfc_column)  
+								  
+								  + K_CFC_* (param * neigh_cfc_sum - 4.0 * cfc_column) 
+								  + cfc_column * GHGincParam;
+			nextstep_ch4_column  <- div_ch4 
+								  - (beta_dw / delta_h)*(neighbours[beta_az].ch4_column - ch4_column) 
+								  - (alfa_dw / delta_h)*(neighbours[alfa_az].ch4_column - ch4_column) 
+							      - (a_beta_dw / delta_h)*(neighbours[a_beta_az].ch4_column - ch4_column)  
+							      - (a_alfa_dw / delta_h)*(neighbours[a_alfa_az].ch4_column - ch4_column)  
+
+								  + K_CH4_* (param * neigh_ch4_sum - 4.0 * ch4_column) 
+								  + ch4_column * GHGincParam;
+			nextstep_nh3_column  <- div_nh3 
+								  - (beta_dw / delta_h)*(neighbours[beta_az].nh3_column - nh3_column) 
+								  - (alfa_dw / delta_h)*(neighbours[alfa_az].nh3_column - nh3_column) 
+							      - (a_beta_dw / delta_h)*(neighbours[a_beta_az].nh3_column - nh3_column)  
+							      - (a_alfa_dw / delta_h)*(neighbours[a_alfa_az].nh3_column - nh3_column)  
+
+								  + K_NH3_* (param * neigh_nh3_sum - 4.0 * nh3_column) 
+								  + nh3_column * GHGincParam;
 			
 
 			
 			if (height_diff_include = 1 and co2_fct_mat[(cycle/2) mod 668] != nil) {
 				next_step_co2_column <- next_step_co2_column -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
-
+			}
+			if (GHGregress = 1 and co2_fct_mat[(cycle/2) mod 668] != nil){
 				if (nh3_column > 10){ // safety - for small amounts of gas - do not apply regression
 					nextstep_nh3_column  <- nextstep_nh3_column  -  predict(co2_fct_mat[(cycle/2) mod 668], [height_diff]);	
 				}
@@ -449,10 +525,6 @@ species cell parallel: true {
 			if (nextstep_cfc_column < 0.0) { nextstep_cfc_column <- 0.0; }
 			 
 		}
-		div_co2 <- 0.0;
-		div_nh3 <- 0.0;
-		div_cfc <- 0.0;
-		div_ch4 <- 0.0;
 	}
 	
 	int find_azim_hex_index( float azim_ )
@@ -473,7 +545,7 @@ species cell parallel: true {
 		co2_column <- next_step_co2_column;
 		cfc_column <- nextstep_cfc_column;
 		ch4_column <- nextstep_ch4_column;
-		nh3_column <- nextstep_nh3_column;	
+		nh3_column <- nextstep_nh3_column;			
 	}
 
 	
@@ -513,6 +585,10 @@ species cell parallel: true {
 	 * every sol the amount of gas increases in cell "cell_affected"
 	 */
 	reflex GHGfactory when: cycle > 0 and cycle mod 2 = 0 and impact_model = 1 {
+		div_nh3 <- 0.0;
+		div_cfc <- 0.0;
+		div_ch4 <- 0.0;
+		
 		loop i from: 0 to: length(cells_aff) - 1{
 			if (cycle >= effect_time[i] and cycle <= effect_stop[i] and id_cell = cells_aff[i]){ 
 				div_nh3 <- nh3_const_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
@@ -528,6 +604,10 @@ species cell parallel: true {
 		 *  Here, we estimate the ammonia opacity as (Kuhn et al., 1979)
 		 * 1000 [u bar] = 1000 * 10e-6 [bar] = 10e-3 [bar] = 10e-3 * 10e5 [Pa] = 10e2 [Pa]
 		 */
+		div_nh3 <- 0.0;
+		div_cfc <- 0.0;
+		div_ch4 <- 0.0;
+		
 		loop i from: 0 to: length(cells_aff) - 1{
 			if (cycle = effect_time[i]  and id_cell = cells_aff[i]){ 
 			div_nh3 <- nh3_abrupt_increase / delta_h2; // add nh3_const_increase [kg] recalculated to pressure
@@ -551,6 +631,8 @@ species cell parallel: true {
 	 * -393.5 kJ/mol - enthalpy carbon dioxide E0?
 	 */
 	reflex CO2melting when: cycle > 0 and cycle mod 2 = 0 {
+		div_co2 <- 0.0;
+
 		loop i from: 0 to: length(cells_aff) - 1{
 			if (cycle >= effect_time[i] and cycle <= effect_stop[i] and id_cell = cells_aff[i]){ 
 		
@@ -625,6 +707,7 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "Gas transport model" var: model_number min: 3;
 	parameter "Height regression include" var: height_diff_include min: 0 max: 1;
 	parameter "Greenhouse regression include" var: green_diff_include min: 0 max: 1;
+	parameter "GHG regression include" var: GHGregress min:0 max: 1; 
 	
 	parameter "Greenhouse model" var: green_mode min: 0 max: 5;
 	parameter "Incident model no" var: impact_model min: 0 max: 3;
@@ -641,6 +724,8 @@ experiment main_experiment until: (cycle <= 100)
 	parameter "CFC abrupt increase (important only when incident model = 2) [kg]" var: cfc_abrupt_increase;
 	
 	parameter "Temperature increase from warming (important only when incident model = 3 [K]" var: Tincrease;
+	
+	parameter "GHG correction increase paramter" var: GHGincParam;
 	
 	parameter "Folder for result" var: outdir;
 	parameter "Log regression function" var: logRegress min: 0 max: 1;
@@ -678,6 +763,7 @@ experiment main_experiment until: (cycle <= 100)
 		 */
 		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
 		monitor "Varianve of MARS greenhouse temperature"            name: var_greenhouse_temp value: cell variance_of(each.Ts);
+		monitor "Sum of NH3" name: sumNH3 value: cell sum_of(each.nh3_column);
 		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
 		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
 
