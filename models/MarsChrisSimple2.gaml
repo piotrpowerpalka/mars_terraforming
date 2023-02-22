@@ -326,7 +326,10 @@ species cell parallel: true {
 	float tau update: tCO2;
 	
 	float Ts;									// calculated mars surface temperature
+	//float Tps update: Ts + Gamma_HT * height;	// potential temperature
 	float Tps update: Ts + Gamma_HT * height;	// potential temperature
+	
+	
 
 	float prevTs <- 0.0;								// to keep the temperature from the previous step
 	float eddy_Ts <- 0.0;
@@ -516,6 +519,7 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Eddy heat transfer coeef" var: Kcoeff;
 	parameter "Hadley heat transfer coeef" var: hadleyParam;
 	parameter "Obliquity" var: nachylenieOsi;
+	parameter "Gamma (Temperature - height)" var: Gamma_HT;
 	parameter "Soil thickness" var: soilDepth;
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Mean CO2 pressure" var: meanCO2;
