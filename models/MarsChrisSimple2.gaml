@@ -32,7 +32,9 @@ global {
     float Tincrease <- 0.0;
     
     int GHGregress <- 0;
-    float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter 
+    //float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter
+    float Gamma_HT <- ga/cCO2; // 0.004751 wzór wg. Handbook on Atmospheric Diffusion
+     
 	float ecc <- 0.09341233; // eccentricity 
 	
     float tempFrozen <- 0.0;
