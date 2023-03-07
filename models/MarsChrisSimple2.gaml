@@ -116,8 +116,11 @@ global {
     
     list<cell> poles_list <- nil;
     list<cell> equ_list <- nil;
-    
-	init {
+ 
+	
+    init {
+			
+		
 	
 		create cell from: csv_file("../includes/fixed/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
     	[   id_cell::int(read("id")),
@@ -177,7 +180,7 @@ global {
     		
     	poles_list <- cell where (each.latitude >= 90 or each.latitude <= -90);
 		equ_list   <- cell where (each.latitude >= -2 and each.latitude <= 2);
-		
+
     }
     
     /**
@@ -191,7 +194,7 @@ global {
  			//if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
 	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + n.latitude + ";" + n.longitude +
     	        	 ";" +  n.Ts + ";" + n.insol + ";" + n.energy  + ";" +  n.pCO2 + ";" +  n.PsatCO2 +
-    	          	 ";" + n.frozenCO2;   
+    	          	 ";" + n.frozenCO2 + ";" + n.heat_flux ;   
     	    	
     	    //}
     	}
@@ -204,11 +207,12 @@ global {
     		if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
 	    	    save [ 
 	    	    	n.id_cell, n.co2_column, 
-	    	    	n.Ts, n.insol, n.energy
+	    	    	n.Ts, n.insol, n.energy, n.pCO2, n.frozenCO2, n.heat_flux
 	    	    ] to: outdir + "/year_" + int( cycle / 1336 )  + "_sol_" + (cycle / 2) mod 668 + "_cell_" + n.id_cell + ".csv" rewrite: true type: "csv";
     	    }    	   
      	}
     }
+    
     
     reflex hadley_heat_transport when: cycle > 0 and cycle mod 2 = 1 {
     	hadleyN <- 0.0;
@@ -304,6 +308,7 @@ species cell parallel: true {
  	
  	float div_co2 <- 0.0;
  	float div_Ts <- 0.0;
+ 	float heat_flux <- 0.0;
  	
 	float co2_atmpres_share;
 	float sunMarsDist <- 1.555252;
@@ -423,7 +428,9 @@ species cell parallel: true {
      * w modelu zaprooponowanym przez Chrisa wszystkie fluxy są per jednostka powierzchni!
      */
 	reflex _balance when: cycle > 1 and cycle mod 2 = 0 {
-						
+		heat_flux <- Ts * cCO2;
+		float mu <- 0.5;
+		
 		prevTs <- Ts;	
 	   	float fi <- latitude;
 		if (fi = 90.0)  { fi <- 89.99; } 
@@ -456,7 +463,13 @@ species cell parallel: true {
 		//insol_en <- (1 - albedo) * insol;  				// insolation ENERGY
 		
 		rad_en   <- emissivity * sigma * prevTs^4;										// radiation of the planet
+		
 		green_en <- sigma * prevTs^4 * (1 - exp(-tau)) / (1 + 0.75 * tau);				// greenhouse effect
+		//green_en <- sigma * prevTs^4 * (   (1/2 + 3/4 * tau) * (1 - exp(-tau/mu)) 
+		//								 - 3/4 * (tau * exp(-tau/mu) + mu * exp(-tau/mu) - mu)/(1+3/4*tau)
+		//);				// greenhouse effect - mejl CHrisa 2023-03-07
+		
+		
 		prev_en  <- prevTs * (cCO2       * (pCO2 - frozenCO2) + cSoil     * soilDepth * soilDensity); 
 		
 		energy <- insol_en - rad_en + green_en + eddy_Ts + hadley_Ts 
@@ -469,6 +482,7 @@ species cell parallel: true {
 //										  1/ J*m-2*K-1                       + J*K-1*m-2
 //										  K * m2 * J-1
 							
+		heat_flux <- heat_flux - Ts * cCO2;	// obliczenie przepływu - różnicowo, pewnie trzeba dodać sol * delta_h, ale to później
 		
 			sublimateCO2 <- 0.0;
 			resublimateCO2 <- 0.0;
@@ -574,6 +588,7 @@ experiment main_experiment until: (cycle > 6680)
 				data "Total Energy [10e15 J]" value: cell sum_of(each.energy) color: #red;  
 			}
 		}
+		
 			
 		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
 		
