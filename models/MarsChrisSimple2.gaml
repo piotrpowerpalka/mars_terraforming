@@ -429,7 +429,6 @@ species cell parallel: true {
      */
 	reflex _balance when: cycle > 1 and cycle mod 2 = 0 {
 		heat_flux <- Ts * cCO2;
-		float mu <- 0.5;
 		
 		prevTs <- Ts;	
 	   	float fi <- latitude;
@@ -464,10 +463,8 @@ species cell parallel: true {
 		
 		rad_en   <- emissivity * sigma * prevTs^4;										// radiation of the planet
 		
-		green_en <- sigma * prevTs^4 * (1 - exp(-tau)) / (1 + 0.75 * tau);				// greenhouse effect
-		//green_en <- sigma * prevTs^4 * (   (1/2 + 3/4 * tau) * (1 - exp(-tau/mu)) 
-		//								 - 3/4 * (tau * exp(-tau/mu) + mu * exp(-tau/mu) - mu)/(1+3/4*tau)
-		//);				// greenhouse effect - mejl CHrisa 2023-03-07
+		//green_en <- sigma * prevTs^4 * (1 - exp(-tau)) / (1 + 0.75 * tau);				// greenhouse effect
+		green_en <- sigma * prevTs^4 * ( (7/8 + 3/2 * tau) * (1 - exp(-2*tau)) - 3/4 * tau  ) / (1 + 3/4*tau);	// greenhouse effect - mejl CHrisa 2023-03-13
 		
 		
 		prev_en  <- prevTs * (cCO2       * (pCO2 - frozenCO2) + cSoil     * soilDepth * soilDensity); 
