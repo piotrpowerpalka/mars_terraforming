@@ -192,9 +192,9 @@ global {
     	) {    	
     	loop n over: cell   {
  			//if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
-	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + n.latitude + ";" + n.longitude +
-    	        	 ";" +  n.Ts + ";" + n.insol + ";" + n.energy  + ";" +  n.pCO2 + ";" +  n.PsatCO2 +
-    	          	 ";" + n.frozenCO2 + ";" + n.heat_flux ;   
+	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
+	 						n.Ts + ";" + n.pCO2 + ";"  +
+    	          	 		n.frozenCO2 + ";" + n.heat_flux ;   
     	    	
     	    //}
     	}
@@ -588,17 +588,25 @@ experiment main_experiment until: (cycle > 6680)
 		
 			
 		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
-		
 		monitor "Varianve of MARS greenhouse temperature"            name: var_greenhouse_temp value: cell variance_of(each.Ts);
 		monitor "Max MARS greenhouse temperature"            		 name: max_greenhouse_temp value: cell max_of(each.Ts);
 		monitor "Min MARS greenhouse temperature"            		 name: min_greenhouse_temp value: cell min_of(each.Ts);
+		
+		monitor "Mean MARS CO2 pressure"                   			 name: mean_pCO2 value: cell mean_of(each.pCO2 - each.frozenCO2);
+		monitor "Varianve of MARS CO2 pressure"            			 name: var_pCO2 value: cell variance_of(each.pCO2 - each.frozenCO2);
+		monitor "Max MARS CO2 pressure"            		 			 name: max_pCO2 value: cell max_of(each.pCO2 - each.frozenCO2);
+		monitor "Min MARS CO2 pressure"            		 			 name: min_pCO2 value: cell min_of(each.pCO2 - each.frozenCO2);
+		
+		monitor "Sum of frozen CO2" 								 name: sumfCO2 value: cell sum_of(each.frozenCO2 * delta_h2);
+		
+		monitor "Hexes with frozen CO2"            		 			 name: hex_no_frozenCO2 value: cell count(each.frozenCO2 > 0.001);
+		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
+		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
+		
 		monitor "Mean equatorial temperature"						 name: mean_equatorial_temp value: equ_list mean_of (each.Ts);
 		monitor "Mean pole temperature"						 		 name: mean_pole_temp value: poles_list mean_of (each.Ts);
 				
 		monitor "Sum of CO2 including frozen" name: sumCO2 value: cell sum_of(each.massCO2);
-		monitor "Sum of frozen CO2" name: sumfCO2 value: cell sum_of(each.frozenCO2 * delta_h2);
-		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
-		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
 		monitor "Sols"     name: solno value: cycle / 2 / step_sol ;
 		monitor "HN"     name: hn value: hadleyN;
 		monitor "HS"     name: hs value: hadleyS;
