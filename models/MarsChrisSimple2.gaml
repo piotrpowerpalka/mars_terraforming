@@ -597,9 +597,9 @@ experiment main_experiment until: (cycle > 6680)
 		monitor "Max MARS CO2 pressure"            		 			 name: max_pCO2 value: cell max_of(each.pCO2 - each.frozenCO2);
 		monitor "Min MARS CO2 pressure"            		 			 name: min_pCO2 value: cell min_of(each.pCO2 - each.frozenCO2);
 		
-		monitor "Sum of frozen CO2" 								 name: sumfCO2 value: cell sum_of(each.frozenCO2 * delta_h2);
+		monitor "Sum of frozen CO2" 								 name: sum_frozenCO2 value: cell sum_of(each.frozenCO2 * delta_h2);
 		
-		monitor "Hexes with frozen CO2"            		 			 name: hex_no_frozenCO2 value: cell count(each.frozenCO2 > 0.001);
+		monitor "Hexes with frozen CO2"            		 			 name: no_hex_frozenCO2 value: cell count(each.frozenCO2 > 0.001);
 		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
 		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
 		
