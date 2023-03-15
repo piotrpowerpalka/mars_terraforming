@@ -50,6 +50,9 @@ global {
 	float prevEn <- 0.0;
 	float eddyEn <- 0.0;
 	float hadEn <- 0.0;
+	
+	float tauDust <- 0.0;
+	float albedoGlobal <- 0.2;	
 		
 	string outdir <- "../results/";
 	    
@@ -330,7 +333,7 @@ species cell parallel: true {
 
 	float tCO2 update: 0.004 * (pCO2 / Pa2bar * ga )^0.4551; // Marinova et.al 2005 [Pa = kg*m-2 * N*kg-1 
 															// CO2 equivalent grey opacity 						
-	float tau update: tCO2;
+	float tau update: tCO2 + tauDust;
 	
 	float Ts;									// calculated mars surface temperature
 	//float Tps update: Ts + Gamma_HT * height;	// potential temperature
@@ -458,7 +461,7 @@ species cell parallel: true {
 	
 		div_co2 <- 0.0;
 		
-		insol_en <- (1 - 0.2) * insol;  				// insolation ENERGY
+		insol_en <- (1 - albedoGlobal) * insol;  				// insolation ENERGY
 		//insol_en <- (1 - albedo) * insol;  				// insolation ENERGY
 		
 		rad_en   <- emissivity * sigma * prevTs^4;										// radiation of the planet
@@ -536,6 +539,8 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil thickness" var: soilDepth;
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Mean CO2 pressure" var: meanCO2;
+	parameter "Soil gray opacity" var: tauDust;
+	parameter "Albedo" var: albedoGlobal;
 	parameter "Folder for result" var: outdir;	
 	parameter "Log output" var: log_output;
 	parameter "Log to CSV" var: log_csv;
