@@ -59,6 +59,7 @@ global {
 	int log_every_sol <- 1;
 	bool log_output <- false;
 	bool log_csv <- false;
+	bool log_vik <- false;
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float sol_const <- 589.0; 		//Present day martian solar constant [Wm-2]
@@ -72,11 +73,14 @@ global {
     float S0 <- 590;		// solar constant 
 	float e <- 0.09341233;		// mimośród (spłaszczenie orbity)
 	float nachylenieOsi <- 24.936;
+
 	float cCO2 <- 783.0; // specific heat cappacity for CO2 [J kg-1 K-1] - in 220 [K] https://en.wikipedia.org/wiki/Carbon_dioxide
 	float cSoil <- 980.0;  // specific heat cappacity for soil (desert sand) [J kg-1 K-1] https://aip.scitation.org/doi/pdf/10.1063/1.4949109
 	float soilDepth <- 0.0001; // [m]
 	float soilDensity <- 1600; // [kg m-3]
 	float emissivity <- 0.9; // [W m-2]
+	
+	float insolParam  <- 1.0; // parameter limiting insoloation - to decrease temp
 	
 	float delta_t <- 88775.0;		// 1 martian sol [s]
 	float delta_h2 <-  marsArea / numOfHexes;	// area of single hex
@@ -194,14 +198,26 @@ global {
     	//cycle mod 56 = 1
     	) {    	
     	loop n over: cell   {
- 			//if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
-	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
+ 	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
 	 						n.Ts + ";" + n.pCO2 + ";"  +
     	          	 		n.frozenCO2 + ";" + n.heat_flux ;   
-    	    	
-    	    //}
+    	    }
+    	
+    }
+    reflex saving_output when: log_vik and (
+    	cycle mod (2 * step_sol * log_every_sol) = 1 // or cycle mod 24 = 1
+    	//cycle mod 56 = 1
+    	) {    	
+    	loop n over: cell   {
+    		if (n.id_cell = 333 or n.id_cell = 3090){
+ 	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
+	 						n.Ts + ";" + n.pCO2 + ";"  +
+    	          	 		n.frozenCO2 + ";" + n.heat_flux ;   
+    	    }
     	}
     }
+			 
+			 
 
     reflex saving_csv when: log_csv and (
     	cycle mod (2 * step_sol * log_every_sol) = 1 // or cycle mod 24 = 1
@@ -454,7 +470,7 @@ species cell parallel: true {
 			liczbaGodzSlonecznych <- OMEGA * 2.0/15.0;
 		}
 		
-		insol <- (24/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
+		insol <- insolParam * (24/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
 					* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sol_lon) 
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 					) / (24 ) ;
@@ -540,10 +556,12 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Mean CO2 pressure" var: meanCO2;
 	parameter "Soil gray opacity" var: tauDust;
+	parameter "Insolation limitation" var: insolParam;
 	parameter "Albedo" var: albedoGlobal;
 	parameter "Folder for result" var: outdir;	
 	parameter "Log output" var: log_output;
 	parameter "Log to CSV" var: log_csv;
+	parameter "Log Viking cells" var: log_vik;
 	 
 	
 	output {
