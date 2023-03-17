@@ -32,8 +32,8 @@ global {
     float Tincrease <- 0.0;
     
     int GHGregress <- 0;
-    //float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter
-    float Gamma_HT <- ga/cCO2; // 0.004751 wzór wg. Handbook on Atmospheric Diffusion
+    float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter
+    //float Gamma_HT <- ga/cCO2; // 0.004751 wzór wg. Handbook on Atmospheric Diffusion
      
 	float ecc <- 0.09341233; // eccentricity 
 	
@@ -204,7 +204,7 @@ global {
     	    }
     	
     }
-    reflex saving_output when: log_vik and (
+    reflex saving_vik when: log_vik and (
     	cycle mod (2 * step_sol * log_every_sol) = 1 // or cycle mod 24 = 1
     	//cycle mod 56 = 1
     	) {    	
