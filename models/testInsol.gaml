@@ -10,7 +10,7 @@ model testInsol
 
 /* Insert your model definition here */
 global{
-	float S0 <- 590;		// stała słoneczna
+	float S0 <- 589;		// stała słoneczna
 	float e <- 0.09341233;		// mimośród (spłaszczenie orbity)
 	float nachylenieOsi <- 24.936;
 	/**
@@ -20,8 +20,8 @@ global{
 //		return Hobh / 24.0;
 //	}
 	init {
-		loop sl from: 0 to: 360 step: 10 {
-			loop lat from: -90 to: 90 step: 10  {
+		loop sl from: 0 to: 360 step: 1 {
+			loop lat from: -90 to: 90 step: 1  {
 				create xxx with: [sollon::sl, lat::lat]{
 					
 					float fi <- lat;
@@ -46,9 +46,11 @@ global{
 					
 					
 					insol <- (24/#pi) * S0 * ((1 + e * cos((sollon - 248) mod 360))^2) / ((1 - e^2)^2) 
-								* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sollon) * OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)) / 24;
+								* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sollon) 
+								* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
+								) / 24;
 		
-				
+					write "" + sl + ";" + lat + ";" + insol;
 					
 				}
 			}
@@ -66,7 +68,7 @@ global{
 		
 		aspect base {
 			
-			draw square(5.0) at: {sollon/2, lat} color: hsb(insol/1000, 1, 1); 
+			draw square(1.0) at: {sollon/2, lat} color: hsb(insol/1000, 1, 1); 
 		}		
 	}
 }

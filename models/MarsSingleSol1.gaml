@@ -304,6 +304,8 @@ species cell parallel: true {
 		
 		insol <- (24/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
 					* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sol_lon) * OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)) / 24;
+					
+		
 		
 		
 		pCO2 <- 0.006 * exp(- height / 10000); // Pressure in [bar]

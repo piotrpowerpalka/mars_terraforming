@@ -62,15 +62,13 @@ global {
 	bool log_vik <- false;
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
-    float sol_const <- 589.0; 		//Present day martian solar constant [Wm-2]
-	float ga <- 3.72076; 			// Mars gravitional acceleration [ms-2] [Nkg-1]
+    float ga <- 3.72076; 			// Mars gravitional acceleration [ms-2] [Nkg-1]
 	float AU <- 149597870700.0;		// astronomical unit [m]
 	float sunTemperature <- 5780.0; 	// sun temperature [K]
 	float sunRadius <- 695700000.0;	// sun radius [m]
 	float marsRadius <- 3396200.0;	// mars radius [m]
 	float marsArea <- 1.448e12;		// mars area [m2]\
-	float marsInclination <- 25.19; // [deg] 
-    float S0 <- 590;		// solar constant 
+	float S0 <- 589;		// solar constant 
 	float e <- 0.09341233;		// mimośród (spłaszczenie orbity)
 	float nachylenieOsi <- 24.936;
 
@@ -450,6 +448,7 @@ species cell parallel: true {
 		heat_flux <- Ts * cCO2;
 		
 		prevTs <- Ts;	
+		
 	   	float fi <- latitude;
 		if (fi = 90.0)  { fi <- 89.99; } 
 		if (fi = -90.0) { fi <- -89.99; }
