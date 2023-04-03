@@ -67,14 +67,14 @@ global {
 	float sunTemperature <- 5780.0; 	// sun temperature [K]
 	float sunRadius <- 695700000.0;	// sun radius [m]
 	float marsRadius <- 3396200.0;	// mars radius [m]
-	float marsArea <- 1.448e12;		// mars area [m2]\
+	float marsArea <- 1.448e14;		// mars area [m2]\
 	float S0 <- 589;		// solar constant 
 	float e <- 0.09341233;		// mimośród (spłaszczenie orbity)
 	float nachylenieOsi <- 24.936;
 
 	float cCO2 <- 783.0; // specific heat cappacity for CO2 [J kg-1 K-1] - in 220 [K] https://en.wikipedia.org/wiki/Carbon_dioxide
 	float cSoil <- 980.0;  // specific heat cappacity for soil (desert sand) [J kg-1 K-1] https://aip.scitation.org/doi/pdf/10.1063/1.4949109
-	float soilDepth <- 0.00005; // [m]
+	float soilDepth <- 0.000075; // [m]
 	float soilDensity <- 1600; // [kg m-3]
 	float emissivity <- 0.9; // [W m-2]
 	
@@ -344,14 +344,14 @@ species cell parallel: true {
 	
 	float pCO2 update: meanCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar]
 	//float massCO2 update: (pCO2 - frozenCO2) * (10000 - height) * delta_h2 + frozenCO2 * delta_h2;
-	float massCO2 update: (pCO2 - frozenCO2) * delta_h2 + frozenCO2 * delta_h2;
+	float massCO2 update: ( (pCO2 - frozenCO2) * delta_h2 + frozenCO2 * delta_h2 ) * Pa2bar / ga;
 	
 	float PsatCO2 update: 1.2264e7 * exp(-3167.8 / Ts); //[bar] za Reference this from Eq 19 in Fanale et al. (1982) Fanale, F.P., Salvail, J.R., Banerdt, W.B. and 
 													// Saunders, R.S., 1982. Mars: The regolith-atmosphere-cap system and climate 
 													// change. Icarus, 50(2-3), pp.381-407.
 												
 
-	float tCO2 update: 0.004 * ((pCO2 - sumFrozen/numOfHexes)/ Pa2bar * ga )^0.4551; // Marinova et.al 2005 [Pa = kg*m-2 * N*kg-1 
+	float tCO2 update: 0.004 * ((pCO2 - sumFrozen/numOfHexes)* Pa2bar / ga )^0.4551; // Marinova et.al 2005 [Pa = kg*m-2 * N*kg-1 
 															// CO2 equivalent grey opacity 						
 	float tau update: tCO2 + tauDust;
 	
@@ -610,11 +610,18 @@ experiment main_experiment until: (cycle > 6680)
 			}
 		}
 		display chart6 refresh: every(2#cycles) {
-			chart "Total CO2 [10e9 kg]" type: series background: #white style: exploded {
-				data "Total CO2 mass [10e9 kg]" value: cell sum_of(each.massCO2) color: #green;  
-				data "Total frozen CO2 mass [10e9 kg]" value: sumFrozen* delta_h2 color: #blue;  
+			chart "Total CO2" type: series background: #white style: exploded {
+//				data "Total CO2 mass" value: cell sum_of(each.massCO2) color: #green;  
+				data "Total frozen CO2 mass" value: sumFrozen * delta_h2 * Pa2bar / ga color: #blue;  
 			}
 		}
+		display chart6a refresh: every(2#cycles) {
+			chart "frozen / CO2" type: series background: #white style: exploded {
+				data "Percent of frozen CO2" value: sumFrozen * delta_h2 * Pa2bar / ga / (cell sum_of(each.massCO2)+1e-8) color: #blue;  
+			}
+		}
+		
+		
 		display chart7 refresh: every(2#cycles) {
 			chart "Total Energy [10e15 J]" type: series background: #white style: exploded {
 				data "Total Energy [10e15 J]" value: cell sum_of(each.energy) color: #red;  
@@ -636,7 +643,7 @@ experiment main_experiment until: (cycle > 6680)
 		monitor "Max MARS CO2 pressure"            		 			 name: max_pCO2 value: cell max_of(each.pCO2 - each.frozenCO2);
 		monitor "Min MARS CO2 pressure"            		 			 name: min_pCO2 value: cell min_of(each.pCO2 - each.frozenCO2);
 		
-		monitor "Sum of frozen CO2" 								 name: sum_frozenCO2 value: cell sum_of(each.frozenCO2 * delta_h2);
+		monitor "Sum of frozen CO2" 								 name: sum_frozenCO2 value: cell sum_of(each.frozenCO2 * delta_h2) * Pa2bar / ga;
 		monitor "Sum of energy" 								 	 name: sum_energy value: cell sum_of(each.energy);
 		
 		
