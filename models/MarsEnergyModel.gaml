@@ -199,7 +199,7 @@ global {
     	loop n over: cell   {
     		int sol <-  (cycle -1) / (2 * step_sol);
  	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
-	 						n.Ts + ";" + n.pCO2 + ";"  +
+	 						n.Ts + ";" + (n.pCO2 - sumFrozen/numOfHexes) + ";"  +
     	          	 		n.frozenCO2 + ";" + n.heat_flux + ";" + 
     	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668;  
     	    }
@@ -230,7 +230,7 @@ global {
     		if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
 	    	    save [ 
 	    	    	n.id_cell, n.co2_column, 
-	    	    	n.Ts, n.insol, n.energy, n.pCO2, n.frozenCO2, n.heat_flux
+	    	    	n.Ts, n.insol, n.energy, (n.pCO2 - sumFrozen/numOfHexes), n.frozenCO2, n.heat_flux
 	    	    ] to: outdir + "/year_" + int( cycle / 1336 )  + "_sol_" + (cycle / 2) mod 668 + "_cell_" + n.id_cell + ".csv" rewrite: true type: "csv";
     	    }    	   
      	}
