@@ -8,7 +8,7 @@
 */
 
 
-model MarsEnergyModel
+model MarsEnergyModelBucket
 
 
 /* Insert your model definition here */
@@ -19,8 +19,10 @@ global {
 	float S <- 2e-7;			// [K *m-1] static stability
 	float L <- 5.3e6;			// [m] equator-pole distance
 	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 K
-	float meanCO2 <- 0.006;  // [bar] mean CO2 pressure
 	
+	float totalCO2 <- 0.0067; // [bar] total amount of CO2 on Mars
+	float sumFrozen update: cell sum_of(each.frozenCO2); 
+	float atmCO2 update: totalCO2 - sumFrozen;  // [bar] mean CO2 pressure
 	
 	int aspect_mode <- 1;				// tryb wyświetlania
 	int sollon_number <- 0;
@@ -50,6 +52,7 @@ global {
 	float prevEn <- 0.0;
 	float eddyEn <- 0.0;
 	float hadEn <- 0.0;
+	float tempSat <- 0.0;
 	
 	float tauDust <- 0.0;
 	float albedoGlobal <- 0.2;	
@@ -78,7 +81,8 @@ global {
 	float soilDensity <- 1600; // [kg m-3]
 	float emissivity <- 0.9; // [W m-2]
 	
-	float insolParam  <- 1.0; // parameter limiting insoloation - to decrease temp
+	//float insolParam  <- 1.0; // parameter limiting insoloation - to decrease temp
+	float insolParam  <- 0.55; // parameter limiting insoloation - to decrease temp
 	
 	float delta_t <- 88775.0;		// 1 martian sol [s]
 	float delta_h2 <-  marsArea / numOfHexes;	// area of single hex
@@ -86,11 +90,13 @@ global {
 	float Kcoeff <- 10000.0;
 	float K_ <- Kcoeff * delta_t / delta_h2 / step_sol; // K * delta_t / delta_h2
 	float Wind <- 0.0;
-	float sumFrozen update: cell sum_of(each.frozenCO2); 
+	
 		
    	float hadleyN <- 0.0;
    	float hadleyS <- 0.0;
-   	float hadleyParam <- 5e-9;
+   	//float hadleyParam <- 5e-9;
+   	float hadleyParam <- 5e-6;
+   	
 		
 	int martianYear <- 668; // martian year [sol]
 	float Pa2bar <- 1e5;			// pascal to bar
@@ -117,8 +123,8 @@ global {
 	int biosphere_hex <- 0; 			// number of hexes unfreezed water (T > 0 C)
 	
     
-	float CO2freezingCoeff <- 0.01 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
-    float CO2defreezingCoeff <- 0.01 / step_sol; // percentage part of CO2 being resublimated per sol
+	float CO2freezingCoeff <- 0.0000025 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
+    float CO2defreezingCoeff <- 0.0000025 / step_sol; // percentage part of CO2 being resublimated per sol
     
     list<cell> poles_list <- nil;
     list<cell> equ_list <- nil;
@@ -180,8 +186,6 @@ global {
 						}
 					}
 				}
-				zonal_wind <- 0.0;
-				merid_wind <- latitude <= 0?1.0:-1.0;
     		}
     		
     	poles_list <- cell where (each.latitude >= 90 or each.latitude <= -90);
@@ -201,7 +205,9 @@ global {
  	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
 	 						n.Ts + ";" + (n.pCO2 - sumFrozen/numOfHexes) + ";"  +
     	          	 		n.frozenCO2 + ";" + n.heat_flux + ";" + 
-    	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668;  
+    	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668 + ";" +
+    	          	 		n.insol
+    	          	 		;  
     	    }
     	
     }
@@ -216,7 +222,9 @@ global {
  	 			write "" + sol + ";"  + n.id_cell+ ";" + 
 	 						n.Ts + ";" + (n.pCO2 - sumFrozen/numOfHexes) + ";"  +
     	          	 		n.frozenCO2 + ";" + n.heat_flux  + ";" + 
-    	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668;   
+    	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668 + ";" +
+    	          	 		n.insol
+    	          	 		;     
     	    }
     	}
     }
@@ -345,16 +353,14 @@ species cell parallel: true {
 	
 	// meanCO2 - frozenTotal 
 	// pTotal = pA + froz + poles
-	float pCO2 update: meanCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar]
-	//float massCO2 update: (pCO2 - frozenCO2) * (10000 - height) * delta_h2 + frozenCO2 * delta_h2;
-	float massCO2 update: ( (pCO2 - frozenCO2) * delta_h2 + frozenCO2 * delta_h2 ) * Pa2bar / ga;
+	float pCO2 update: atmCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar]
 	
 	float PsatCO2 update: 1.2264e7 * exp(-3167.8 / Ts); //[bar] za Reference this from Eq 19 in Fanale et al. (1982) Fanale, F.P., Salvail, J.R., Banerdt, W.B. and 
 													// Saunders, R.S., 1982. Mars: The regolith-atmosphere-cap system and climate 
 													// change. Icarus, 50(2-3), pp.381-407.
 												
 
-	float tCO2 update: 0.004 * ((pCO2 - sumFrozen/numOfHexes)* Pa2bar / ga )^0.4551; // Marinova et.al 2005 [Pa = kg*m-2 * N*kg-1 
+	float tCO2 update: 0.004 * ((pCO2)* Pa2bar / ga )^0.4551; // Marinova et.al 2005 [Pa = kg*m-2 * N*kg-1 
 															// CO2 equivalent grey opacity 						
 	float tau update: tCO2 + tauDust;
 	
@@ -410,9 +416,7 @@ species cell parallel: true {
 	aspect sphere_frozenCo2{
 		draw sphere(2) at: {50*x+50,50*y+50,50*z+50} color: frozenCO2>0.001?rgb(128+frozenCO2*10000, 128+frozenCO2*10000, 128+frozenCO2*10000):#black; // border: #black;	
 	}
-	aspect sphere_massCo2{
-		draw sphere(2) at: {50*x+50,50*y+50,50*z+50} color: rgb(0, massCO2*1e-4, 0); // border: #black;	
-	}
+	
 	
 	
 	reflex initial when: cycle = 0 {
@@ -420,22 +424,6 @@ species cell parallel: true {
 		Ts <- temp;
 		prevTs <- temp;
 	}
-		
-	int find_azim_hex_index( float azim_ )
-	{
-		if( (azim_ >= 0 and azim_ < 30) or (azim_ >= 330 and azim_ <= 360))
-		{
-			return 0;
-		}
-		loop i from: 30 to: 270 step: 60  {
-			if( azim_ >= i and azim_ < i+60 )
-			{
-				return (i-30)/60 + 1;
-			}
-		}
-	}	
-	
-	
 	reflex finite_element when: cycle > 0 and cycle mod 2 = 1
 	{
 		float param <- (1-spec) * 4.0/6.0 + spec * 4.0/5.0; // jezeli spec to 4/5 inaczej 2/3
@@ -481,7 +469,7 @@ species cell parallel: true {
 					* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sol_lon) 
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 					) / (24 ) ; 
-					// [W * m-2]
+		// [W * m-2]
 	
 		div_co2 <- 0.0;
 		
@@ -497,7 +485,7 @@ species cell parallel: true {
 		green_en <- sigma * prevTs^4 * ( (7/8 + 3/2 * tau) * (1 - exp(-2*tau)) - 3/4 * tau  ) / (1 + 3/4*tau) ;	// greenhouse effect - mejl CHrisa 2023-03-13
 		
 		
-		prev_en  <- prevTs * (cCO2       * (pCO2 - sumFrozen/numOfHexes) + cSoil     * soilDepth * soilDensity); 
+		prev_en  <- prevTs * (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); 
 		// 1000 - 1500 Pa - exchangable CO2
 		// total CO2 in atmosphere - atmoshpere + condension + polar caps
 		// every cell has atmoshpere relating to pTotal
@@ -508,36 +496,46 @@ species cell parallel: true {
 							   
 		
 		Ts <- prevTs			// previous step temp. 
-				+  energy / (cCO2       * (pCO2 - sumFrozen/numOfHexes) + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
-//										  1/ J*kg-1*K-1 *  kg * m-2          + J*kg-1*K-1 * m         * kg * m-3
-//										  1/ J*m-2*K-1                       + J*K-1*m-2
-//										  K * m2 * J-1
+				+  energy / (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
+//										  Wm-2 / J*kg-1*K-1 *  kg * m-2          + J*kg-1*K-1 * m         * kg * m-3
+//										  Wm-2 1/ J*m-2*K-1                       + J*K-1*m-2
+//										  Wm-2 /K-1 * m2 * J-1
+//										  Ks-1 
 							
 		heat_flux <- heat_flux - energy;	// obliczenie przepływu - różnicowo, pewnie trzeba dodać sol * delta_h, ale to później
 		
 			sublimateCO2 <- 0.0;
 			resublimateCO2 <- 0.0;
 			
-			if (pCO2 - sumFrozen/numOfHexes > PsatCO2){ // zbyt dużo CO2 - należy go "zabrać" z atmosfery i dodać do czapy lodowej
+			if (pCO2 > PsatCO2){ // zbyt dużo CO2 - należy go "zabrać" z atmosfery i dodać do czapy lodowej
 										// energia hexa maleje
-				co2_excess <- (pCO2- sumFrozen/numOfHexes) * CO2freezingCoeff; // [bar] 
+				co2_excess <- totalCO2 * CO2freezingCoeff; // [bar] 
+				
+				if (co2_excess > atmCO2){
+					co2_excess <- atmCO2;
+				}
 				
 				div_co2 <- -co2_excess; // [bar]
 				frozenCO2 <- frozenCO2 + co2_excess; // [bar]
 				//resublimateCO2 <- co2_excess * delta_h2 * 289750; // energia sublimacji [J]
-				resublimateCO2 <- co2_excess * 733932 / delta_t ; // energia sublimacji [J] - bez mnozenia przez delta_h2 - energia per jednostka pow.
-//								  kg*m-2 * J * kg-1 = J*m-2
+				resublimateCO2 <- co2_excess * 733932 / delta_t ; // energia sublimacji [Wm-2] - bez mnozenia przez delta_h2 - energia per jednostka pow.
+//								  kg*m-2 * J/s * kg-1 = J/s*m-2
 // dzielenie przez delta_t żeby dostać wyniki w Watach 
 // The heat of sublimation for carbon dioxide - 32.3 kJ/mol.
 // masa molowa CO2 - 44.0095 g/mol
 // The heat of sublimation for carbon dioxide = 32.3 kJ/mol * (1/44.0095) mol/g = 0,73393 kJ/g = 733,93 kJ/kg = 733932 J/kg
 						
-			} else if (pCO2 - sumFrozen/numOfHexes < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
-				co2_excess <- frozenCO2 * CO2defreezingCoeff; // [bar]
+			} else if (pCO2  < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
+				co2_excess <- totalCO2 * CO2defreezingCoeff; // [bar]
+				
+				if (co2_excess > frozenCO2){
+					co2_excess <- frozenCO2;
+				}
+				
 				div_co2 <- co2_excess;
 				frozenCO2 <- frozenCO2 - co2_excess; // w [bar] !!!
 				//sublimateCO2 <- co2_excess * delta_h2 * 289750 ; // energia resublimacji [J]
-				sublimateCO2 <- co2_excess * 733932/ delta_t; // energia resublimacji [J]	- bez mnozenia przez delta_h2 - energia per jednostka pow.			
+				sublimateCO2 <- co2_excess * 733932 / delta_t; // energia resublimacji [Wm-2]	- bez mnozenia przez delta_h2 - energia per jednostka pow.			
 								
 			}
 		
@@ -545,7 +543,8 @@ species cell parallel: true {
 	reflex f when: id_cell = selected_cell {
 		tempFrozen <- frozenCO2;
 		tempTemp <- Ts;
-		tempCO2 <- pCO2 - sumFrozen/numOfHexes; 
+		tempCO2 <- pCO2; 
+		tempSat <- PsatCO2;
 		tempEnergy  <- energy;
 		
 		eddyEn <- eddy_Ts;
@@ -573,7 +572,7 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Gamma (Temperature - height)" var: Gamma_HT;
 	parameter "Soil thickness" var: soilDepth;
 	parameter "Soil emissivity" var: emissivity;
-	parameter "Mean CO2 pressure" var: meanCO2;
+	parameter "Total CO2 on Mars" var: totalCO2;
 	parameter "Soil gray opacity" var: tauDust;
 	parameter "Insolation limitation" var: insolParam;
 	parameter "Albedo" var: albedoGlobal;
@@ -599,6 +598,7 @@ experiment main_experiment until: (cycle > 6680)
 		display chart3 refresh: every(2#cycles) {
 			chart "CO2" type: series background: #white style: exploded {
 				data "CO2" value: tempCO2 color: #black;  
+				//data "Sat press" value: tempSat color: #red;
 				data "Frozen CO2" value: tempFrozen color: #blue;  
 			}
 		}
@@ -609,7 +609,7 @@ experiment main_experiment until: (cycle > 6680)
 				data "Greenhouse Energy" value: greenEn color: #green;
 				data "Radiation Energy" value: radEn color: #red;
 				data "Insolation Energy" value: insolEn color: #orange;
-				data "Preserved Energy" value: prevEn color: #gray;
+				//data "Preserved Energy" value: prevEn color: #gray;
 				data "Eddy Energy"  value: eddyEn color: #purple;
 				data "Hadley Energy" value: hadEn color: #cyan;
 	
@@ -618,13 +618,14 @@ experiment main_experiment until: (cycle > 6680)
 		}
 		display chart6 refresh: every(2#cycles) {
 			chart "Total CO2" type: series background: #white style: exploded {
-//				data "Total CO2 mass" value: cell sum_of(each.massCO2) color: #green;  
+				data "Total CO2 mass" value: totalCO2 * delta_h2 * Pa2bar / ga  color: #red;  
 				data "Total frozen CO2 mass" value: sumFrozen * delta_h2 * Pa2bar / ga color: #blue;  
+				data "Atmosphere CO2 mass" value: atmCO2 * delta_h2 * Pa2bar / ga color: #yellow;  
 			}
 		}
 		display chart6a refresh: every(2#cycles) {
 			chart "frozen / CO2" type: series background: #white style: exploded {
-				data "Percent of frozen CO2" value: sumFrozen * delta_h2 * Pa2bar / ga / (cell sum_of(each.massCO2)+1e-8) color: #blue;  
+				data "Percent of frozen CO2" value: sumFrozen / totalCO2 color: #blue;  
 			}
 		}
 		
@@ -654,14 +655,13 @@ experiment main_experiment until: (cycle > 6680)
 		monitor "Sum of energy" 								 	 name: sum_energy value: cell sum_of(each.energy);
 		
 		
-		monitor "Hexes with frozen CO2"            		 			 name: no_hex_frozenCO2 value: cell count(each.frozenCO2 > 0.001);
+		monitor "Hexes with frozen CO2"            		 			 name: no_hex_frozenCO2 value: cell count(each.frozenCO2 > 1e-8);
 		monitor "Number of hexes biologically habitable (T > -25 C)" name: biol_habitable_hex value: cell count(each.Ts > 248.15);
 		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
 		
 		monitor "Mean equatorial temperature"						 name: mean_equatorial_temp value: equ_list mean_of (each.Ts);
 		monitor "Mean pole temperature"						 		 name: mean_pole_temp value: poles_list mean_of (each.Ts);
 				
-		monitor "Sum of CO2 including frozen" name: sumCO2 value: cell sum_of(each.massCO2);
 		monitor "Sols"     name: solno value: cycle / 2 / step_sol ;
 		monitor "HN"     name: hn value: hadleyN;
 		monitor "HS"     name: hs value: hadleyS;
