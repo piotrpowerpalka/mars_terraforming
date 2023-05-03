@@ -20,9 +20,11 @@ global {
 	float L <- 5.3e6;			// [m] equator-pole distance
 	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 K
 	
-	float totalCO2 <- 0.0067; // [bar] total amount of CO2 on Mars
-	float sumFrozen update: cell sum_of(each.frozenCO2); 
-	float atmCO2 update: totalCO2 - sumFrozen;  // [bar] mean CO2 pressure
+	float totalCO2 <- 0.006; // [bar] total amount of CO2 on Mars
+	float sumFrozen <- 0.0;
+	float atmCO2 <- totalCO2 - sumFrozen;
+	//float sumFrozen update: cell sum_of(each.frozenCO2); 
+	//float atmCO2 update: totalCO2 - sumFrozen;  // [bar] mean CO2 pressure
 	
 	int aspect_mode <- 1;				// tryb wyświetlania
 	int sollon_number <- 0;
@@ -54,6 +56,25 @@ global {
 	float hadEn <- 0.0;
 	float tempSat <- 0.0;
 	
+	float fitness <- 1e12;
+	float yty_changes_RMSE <- 1e12;
+	
+	float mape_tv1 <- 0.0;
+	float mape_pv1 <- 0.0;
+	float mape_tv2 <- 0.0;
+	float mape_pv2 <- 0.0;
+	float rmse_tv1 <- 0.0;
+	float rmse_pv1 <- 0.0;
+	float rmse_tv2 <- 0.0;
+	float rmse_pv2 <- 0.0;
+	
+	float rmse_avgt <- 0.0;
+	float mape_avgt <- 0.0;
+	
+	float rmse_avgp <- 0.0;
+	float mape_avgp <- 0.0;
+	
+	
 	float tauDust <- 0.0;
 	float albedoGlobal <- 0.2;	
 		
@@ -63,6 +84,7 @@ global {
 	bool log_output <- false;
 	bool log_csv <- false;
 	bool log_vik <- false;
+	bool log_calib <- false;
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float ga <- 3.72076; 			// Mars gravitional acceleration [ms-2] [Nkg-1]
@@ -77,12 +99,9 @@ global {
 
 	float cCO2 <- 783.0; // specific heat cappacity for CO2 [J kg-1 K-1] - in 220 [K] https://en.wikipedia.org/wiki/Carbon_dioxide
 	float cSoil <- 980.0;  // specific heat cappacity for soil (desert sand) [J kg-1 K-1] https://aip.scitation.org/doi/pdf/10.1063/1.4949109
-	float soilDepth <- 0.000075; // [m]
+	float soilDepth <- 0.71; // [m]
 	float soilDensity <- 1600; // [kg m-3]
 	float emissivity <- 0.9; // [W m-2]
-	
-	//float insolParam  <- 1.0; // parameter limiting insoloation - to decrease temp
-	float insolParam  <- 0.55; // parameter limiting insoloation - to decrease temp
 	
 	float delta_t <- 88775.0;		// 1 martian sol [s]
 	float delta_h2 <-  marsArea / numOfHexes;	// area of single hex
@@ -95,9 +114,8 @@ global {
    	float hadleyN <- 0.0;
    	float hadleyS <- 0.0;
    	//float hadleyParam <- 5e-9;
-   	float hadleyParam <- 5e-6;
-   	
-		
+   	float hadleyParam <- 1e-10;
+   		
 	int martianYear <- 668; // martian year [sol]
 	float Pa2bar <- 1e5;			// pascal to bar
 	
@@ -108,32 +126,43 @@ global {
 	file csv_hadley <- csv_file("../includes/hadley_heat_transport.csv",",",float,true);
 	matrix<float> mat_hadley <- matrix<float>(csv_hadley.contents);
 	
+	file csv_v1 <- csv_file("../includes/v1.csv",";",float,true);
+	matrix<float> vik1 <- matrix<float>(csv_v1.contents);
+	
+	file csv_v2 <- csv_file("../includes/v2.csv",";",float,true);
+	matrix<float> vik2 <- matrix<float>(csv_v2.contents);
+	
+	file csv_calib <- csv_file("../includes/calib_data.csv",";",float,true);
+	matrix<float> calib <- matrix<float>(csv_calib.contents);
+	
+		
 	
 	int step_sol <- 1;	// number of iterations per sol
-	int sol_year <- 0 update: (cycle/(2 * step_sol)) mod martianYear; // number of sol in martian year
-    int sol_lon  <- 0 update: int(sol_year / 668.0 * 360.0); // recalculation sol no -> solar logitude
+	int sol_year <- 0; // update: (cycle/(2 * step_sol)) mod martianYear; // number of sol in martian year
+    int sol_lon  <- 0; // update: int(sol_year / 668.0 * 360.0); // recalculation sol no -> solar logitude
     
     
 	float mean_greenhouse_temp 	<- 0.0 update: cell mean_of (each.Ts);  // mean greenhouse temperature
 	float var_greenhouse_temp 	<- 0.0;
 	float mean_equatorial_temp 	<- 0.0 update: equ_list mean_of (each.Ts);
-	float mean_pole_temp 		<- 0.0 update: poles_list mean_of(each.Ts); 
+	float mean_Npole_temp 		<- 0.0 update: N_poles_list mean_of(each.Ts); 
+	float mean_Spole_temp 		<- 0.0 update: S_poles_list mean_of(each.Ts); 
 	
 	int biol_habitable_hex <- 0;		// number of hexes biologically habitable (T > -25 C)
 	int biosphere_hex <- 0; 			// number of hexes unfreezed water (T > 0 C)
 	
     
-	float CO2freezingCoeff <- 0.0000025 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
-    float CO2defreezingCoeff <- 0.0000025 / step_sol; // percentage part of CO2 being resublimated per sol
+	float CO2freezingCoeff <- 0.0000015 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
     
-    list<cell> poles_list <- nil;
+    list<cell> N_poles_list <- nil;
+    list<cell> S_poles_list <- nil;
+    list<cell> _45p_poles_list <- nil;
+    list<cell> _45m_poles_list <- nil;
     list<cell> equ_list <- nil;
  
 	
     init {
 			
-		
-	
 		create cell from: csv_file("../includes/fixed/out_grid_4002_0h_" + sollon_number + "_sollon.csv", ";", true) with:
     	[   id_cell::int(read("id")),
     		x::float(read("x")),
@@ -188,9 +217,22 @@ global {
 				}
     		}
     		
-    	poles_list <- cell where (each.latitude >= 90 or each.latitude <= -90);
+    	N_poles_list <- cell where (each.latitude >= 90);
+		S_poles_list <- cell where (each.latitude <= -90);
+		_45p_poles_list <- cell where (each.latitude >= 44 and each.latitude <= 46);
+		_45m_poles_list <- cell where (each.latitude >= -46 and each.latitude <= -44);
+		
+		
 		equ_list   <- cell where (each.latitude >= -2 and each.latitude <= 2);
 
+    }
+    
+    reflex update {
+    	sumFrozen <- cell sum_of(each.frozenCO2); 
+		atmCO2 <- totalCO2 - sumFrozen;  // [bar] mean CO2 pressure
+		sol_year <- (cycle/(2 * step_sol)) mod martianYear; // number of sol in martian year
+   		sol_lon  <- int(sol_year / 668.0 * 360.0); // recalculation sol no -> solar logitude
+    
     }
     
     /**
@@ -203,8 +245,8 @@ global {
     	loop n over: cell   {
     		int sol <-  (cycle -1) / (2 * step_sol);
  	 			write "" + ( (cycle -1) / (2 * step_sol) ) + ";" + n.id_cell+ ";" + 
-	 						n.Ts + ";" + (n.pCO2 - sumFrozen/numOfHexes) + ";"  +
-    	          	 		n.frozenCO2 + ";" + n.heat_flux + ";" + 
+	 						n.Ts + ";" + n.pCO2 + ";"  +
+    	          	 		n.frozenCO2  + ";" + n.heat_flux + ";" + 
     	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668 + ";" +
     	          	 		n.insol
     	          	 		;  
@@ -220,7 +262,7 @@ global {
     		
     		if (n.id_cell = 333 or n.id_cell = 3090){
  	 			write "" + sol + ";"  + n.id_cell+ ";" + 
-	 						n.Ts + ";" + (n.pCO2 - sumFrozen/numOfHexes) + ";"  +
+	 						n.Ts + ";" + n.pCO2 + ";"  +
     	          	 		n.frozenCO2 + ";" + n.heat_flux  + ";" + 
     	          	 		(sol mod 668) + ";" + (sol - (sol mod 668))/668 + ";" +
     	          	 		n.insol
@@ -238,7 +280,7 @@ global {
     		if (length(selected_cells) = 0 or n.id_cell in selected_cells) {
 	    	    save [ 
 	    	    	n.id_cell, n.co2_column, 
-	    	    	n.Ts, n.insol, n.energy, (n.pCO2 - sumFrozen/numOfHexes), n.frozenCO2, n.heat_flux
+	    	    	n.Ts, n.insol, n.energy, n.pCO2, n.frozenCO2, n.heat_flux
 	    	    ] to: outdir + "/year_" + int( cycle / 1336 )  + "_sol_" + (cycle / 2) mod 668 + "_cell_" + n.id_cell + ".csv" rewrite: true type: "csv";
     	    }    	   
      	}
@@ -289,15 +331,57 @@ global {
     		}   		
     	}
 		loop n over: cell {
-    		ask n {n.hadley_Ts <- n.hadley_Ts * mean_greenhouse_temp^0.5 * (mean_equatorial_temp - mean_pole_temp)^2; }
+    		ask n {n.hadley_Ts <- n.hadley_Ts * mean_greenhouse_temp^0.5 * (mean_equatorial_temp - (mean_Npole_temp+mean_Spole_temp)/2)^2; }
     	}
 	}
+	
+	reflex rmse when: cycle mod (2 * step_sol * log_every_sol) = 1 {
+		float avgp <- cell mean_of(each.pCO2);
+		
+		rmse_avgt <- rmse_avgt + (calib[1, sol_year] - mean_greenhouse_temp)^2;
+		mape_avgt <- mape_avgt + abs(calib[1, sol_year] - mean_greenhouse_temp)/calib[1, sol_year];
+		
+		rmse_avgp <- rmse_avgp + (calib[4, sol_year]/1e5 - avgp)^2;
+		mape_avgp <- mape_avgp + abs(calib[4, sol_year]/1e5 - avgp)/(calib[4, sol_year]/1e5);
+		
+	}
     
-    
+    reflex reset_diff when: sol_year = 667 and cycle mod (2 * step_sol * log_every_sol) = 1{
+		mape_tv1 <- mape_tv1 / 358;
+		mape_pv1 <- mape_pv1 / 358;
+		
+		mape_tv2 <- mape_tv2 / 367;
+		mape_pv2 <- mape_pv2 / 367;
+		
+		rmse_tv1 <- rmse_tv1 / 358;
+		rmse_pv1 <- rmse_pv1 / 358;
+		
+		rmse_tv2 <- rmse_tv2 / 367;
+		rmse_pv2 <- rmse_pv2 / 367;
+		
+		rmse_avgt <- rmse_avgt / 668;
+		mape_avgt <- mape_avgt / 668;
+		rmse_avgp <- rmse_avgp / 668;
+		mape_avgp <- mape_avgp / 668;
+		
+		
+		
+		//fitness <- mape_tv1 + mape_tv2 + mape_pv1 + mape_pv2;
+		fitness <- rmse_tv1 + rmse_tv2 + rmse_pv1 * 30000 + rmse_pv2* 30000 + rmse_avgt + rmse_avgp* 30000;
+		
+		//fitness <- max(mape_tv1, mape_pv1);  
+		
+		if (log_calib){
+			write "" + rmse_tv1 + ";" + rmse_tv2 + ";" + rmse_pv1 + ";" + rmse_pv2 + ";" + rmse_avgt + ";" + rmse_avgp + ";" + fitness;
+			write "" + hadleyParam + ";" + soilDepth + ";" + totalCO2; 
+		}
+	}
     
     
    
 }
+
+
 
 species cell parallel: true {
 	list<cell> neighbours;
@@ -411,10 +495,10 @@ species cell parallel: true {
 	}
 	aspect plain_FrozenCo2{
 		draw circle(1.0) at: {(longitude+180.0)/3.6, (latitude+90.0)/1.8} 
-			color: frozenCO2>0.001?rgb(128+frozenCO2*10000, 128+frozenCO2*10000, 128+frozenCO2*10000):#black border: #black;	
+			color: frozenCO2>1e-8?rgb(128+frozenCO2*10000, 128+frozenCO2*10000, 128+frozenCO2*10000):#black border: #black;	
 	}
 	aspect sphere_frozenCo2{
-		draw sphere(2) at: {50*x+50,50*y+50,50*z+50} color: frozenCO2>0.001?rgb(128+frozenCO2*10000, 128+frozenCO2*10000, 128+frozenCO2*10000):#black; // border: #black;	
+		draw sphere(2) at: {50*x+50,50*y+50,50*z+50} color: frozenCO2>1e-8?rgb(128+frozenCO2*10000, 128+frozenCO2*10000, 128+frozenCO2*10000):#black; // border: #black;	
 	}
 	
 	
@@ -465,12 +549,10 @@ species cell parallel: true {
 			liczbaGodzSlonecznych <- OMEGA * 2.0/15.0;
 		}
 		
-		insol <- insolParam * (24/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
+		insol <- (1.0/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
 					* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sol_lon) 
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
-					) / (24 ) ; 
-		// [W * m-2]
-	
+					) ; 
 		div_co2 <- 0.0;
 		
 		//insol_en <- (1 - ( (frozenCO2 > 0.001)?0.8:albedoGlobal) ) * insol;  				// insolation ENERGY
@@ -484,8 +566,7 @@ species cell parallel: true {
 		//green_en <- sigma * prevTs^4 * (1 - exp(-tau)) / (1 + 0.75 * tau);				// greenhouse effect
 		green_en <- sigma * prevTs^4 * ( (7/8 + 3/2 * tau) * (1 - exp(-2*tau)) - 3/4 * tau  ) / (1 + 3/4*tau) ;	// greenhouse effect - mejl CHrisa 2023-03-13
 		
-		
-		prev_en  <- prevTs * (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); 
+		prev_en  <- prevTs * (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity) / delta_t; 
 		// 1000 - 1500 Pa - exchangable CO2
 		// total CO2 in atmosphere - atmoshpere + condension + polar caps
 		// every cell has atmoshpere relating to pTotal
@@ -496,7 +577,7 @@ species cell parallel: true {
 							   
 		
 		Ts <- prevTs			// previous step temp. 
-				+  energy / (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
+				+  energy * delta_t / (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
 //										  Wm-2 / J*kg-1*K-1 *  kg * m-2          + J*kg-1*K-1 * m         * kg * m-3
 //										  Wm-2 1/ J*m-2*K-1                       + J*K-1*m-2
 //										  Wm-2 /K-1 * m2 * J-1
@@ -526,7 +607,7 @@ species cell parallel: true {
 // The heat of sublimation for carbon dioxide = 32.3 kJ/mol * (1/44.0095) mol/g = 0,73393 kJ/g = 733,93 kJ/kg = 733932 J/kg
 						
 			} else if (pCO2  < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
-				co2_excess <- totalCO2 * CO2defreezingCoeff; // [bar]
+				co2_excess <- totalCO2 * CO2freezingCoeff; // [bar]
 				
 				if (co2_excess > frozenCO2){
 					co2_excess <- frozenCO2;
@@ -540,6 +621,42 @@ species cell parallel: true {
 			}
 		
 	}
+
+	reflex diff_v1 when: id_cell = 333 and ( (sol_year >= 180 and sol_year <= 286) or (sol_year >= 303 and sol_year <= 553)){
+		//Vik 1
+		int offset <- 0;
+		if      (sol_year <= 286) {offset <- 180;}
+		else if (sol_year <= 553) {offset <- 197;}
+		
+		mape_tv1 <- mape_tv1 + abs(vik1[1, sol_year - offset] - Ts)/vik1[1, sol_year - offset];
+		mape_pv1 <- mape_pv1 + abs(vik1[2, sol_year - offset]/1e5 - pCO2)/(vik1[2, sol_year - offset]/1e5);		
+		
+		rmse_tv1 <- rmse_tv1 + (vik1[1, sol_year - offset] - Ts)^2;
+		rmse_pv1 <- rmse_pv1 + (vik1[2, sol_year - offset]/1e5 - pCO2)^2;
+		
+				
+	}
+	
+	reflex diff_v2 when: id_cell = 3090 and ( (sol_year >= 219 and sol_year <= 346) 
+										   or (sol_year >= 354 and sol_year <= 357)
+										   or (sol_year >= 362 and sol_year <= 596)
+	){
+		//Vik 2
+		int offset <- 0;
+		if      (sol_year <= 346) {offset <- 219;}
+		else if (sol_year <= 357) {offset <- 219+8;}
+		else if (sol_year <= 596) {offset <- 219+8+5;}
+		
+		mape_tv2 <- mape_tv2 + abs(vik2[1, sol_year - offset] - Ts)/vik2[1, sol_year - offset];
+		mape_pv2 <- mape_pv2 + abs(vik2[2, sol_year - offset]/1e5 - pCO2)/vik2[2, sol_year - offset]/1e5;		
+				
+		rmse_tv2 <- rmse_tv2 + (vik2[1, sol_year - offset] - Ts)^2;
+		rmse_pv2 <- rmse_pv2 + (vik2[2, sol_year - offset]/1e5 - pCO2)^2;
+	}
+	
+	
+	
+	
 	reflex f when: id_cell = selected_cell {
 		tempFrozen <- frozenCO2;
 		tempTemp <- Ts;
@@ -565,7 +682,6 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Selected cell" var: selected_cell;
 	parameter "Selected cells" var: selected_cells;
 	parameter "Sublimation paramter" var: CO2freezingCoeff;
-	parameter "Resublimation paramter" var: CO2defreezingCoeff;
 	parameter "Eddy heat transfer coeef" var: Kcoeff;
 	parameter "Hadley heat transfer coeef" var: hadleyParam;
 	parameter "Obliquity" var: nachylenieOsi;
@@ -574,20 +690,20 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Total CO2 on Mars" var: totalCO2;
 	parameter "Soil gray opacity" var: tauDust;
-	parameter "Insolation limitation" var: insolParam;
 	parameter "Albedo" var: albedoGlobal;
 	parameter "Folder for result" var: outdir;	
 	parameter "Log output" var: log_output;
 	parameter "Log to CSV" var: log_csv;
 	parameter "Log Viking cells" var: log_vik;
+	parameter "Log calibration" var: log_calib;
 	 
 	
 	output {
 	
-		display mars_plain_Ts type: opengl ambient_light: 100 background: #white  
+		/*display mars_plain_Ts type: opengl ambient_light: 100 background: #white  
 		{
 			species cell aspect: plain_Ts;
-		}	
+		}*/	
 		
 	
 		display chart2 refresh: every(2#cycles) {
@@ -596,13 +712,13 @@ experiment main_experiment until: (cycle > 6680)
 			}
 		}
 		display chart3 refresh: every(2#cycles) {
-			chart "CO2" type: series background: #white style: exploded {
+			chart "CO2 [bar]" type: series background: #white style: exploded {
 				data "CO2" value: tempCO2 color: #black;  
 				//data "Sat press" value: tempSat color: #red;
 				data "Frozen CO2" value: tempFrozen color: #blue;  
 			}
 		}
-		display chart4 refresh: every(2#cycles) {
+		/*display chart4 refresh: every(2#cycles) {
 			chart "Energy" type: series background: #white style: exploded {
 				data "Total Energy" value: tempEnergy color: #black;  
 				data "Latent Energy" value: latentEn color: #blue;
@@ -615,12 +731,20 @@ experiment main_experiment until: (cycle > 6680)
 	
 				
 			}
-		}
-		display chart6 refresh: every(2#cycles) {
+		}*/
+		/*display chart6 refresh: every(2#cycles) {
 			chart "Total CO2" type: series background: #white style: exploded {
 				data "Total CO2 mass" value: totalCO2 * delta_h2 * Pa2bar / ga  color: #red;  
 				data "Total frozen CO2 mass" value: sumFrozen * delta_h2 * Pa2bar / ga color: #blue;  
 				data "Atmosphere CO2 mass" value: atmCO2 * delta_h2 * Pa2bar / ga color: #yellow;  
+			}
+		}*/
+		display chart6 refresh: every(2#cycles) {
+			chart "Total CO2 [bar]" type: series background: #white style: exploded {
+		//		data "Total CO2" value: totalCO2   color: #red;  
+				data "Total frozen CO2" value: sumFrozen color: #blue;  
+				data "Atmosphere CO2" value: atmCO2 color: #yellow;
+				data "MCD CO2" value: calib[4, sol_year]/1e5 color: #gray;  
 			}
 		}
 		display chart6a refresh: every(2#cycles) {
@@ -630,26 +754,32 @@ experiment main_experiment until: (cycle > 6680)
 		}
 		
 		
-		display chart7 refresh: every(2#cycles) {
+		/*display chart7 refresh: every(2#cycles) {
 			chart "Total Energy [10e15 J]" type: series background: #white style: exploded {
 				data "Total Energy [10e15 J]" value: cell sum_of(each.energy) color: #red;  
 			}
-		}
+		}*/
 		display chart8 refresh: every(2#cycles) {
 			chart "Mean temp" type: series background: #white style: exploded {
 				data "Mean temp" value: cell mean_of(each.Ts) color: #red;  
+				data "MCD temp" value: calib[1, sol_year] color: #gray;
 			}
 		}
-			
+		/*display chart9 refresh: every(2#cycles) {
+			chart "Mean insol" type: series background: #white style: exploded {
+				data "Mean insol" value: cell mean_of(each.insol) color: #red;  
+			}
+		}*/
+		
 		monitor "Mean MARS greenhouse temperature"                   name: mean_greenhouse_temp value: cell mean_of(each.Ts);
 		monitor "Varianve of MARS greenhouse temperature"            name: var_greenhouse_temp value: cell variance_of(each.Ts);
 		monitor "Max MARS greenhouse temperature"            		 name: max_greenhouse_temp value: cell max_of(each.Ts);
 		monitor "Min MARS greenhouse temperature"            		 name: min_greenhouse_temp value: cell min_of(each.Ts);
 		
-		monitor "Mean MARS CO2 pressure"                   			 name: mean_pCO2 value: cell mean_of(each.pCO2 - each.frozenCO2);
-		monitor "Varianve of MARS CO2 pressure"            			 name: var_pCO2 value: cell variance_of(each.pCO2 - each.frozenCO2);
-		monitor "Max MARS CO2 pressure"            		 			 name: max_pCO2 value: cell max_of(each.pCO2 - each.frozenCO2);
-		monitor "Min MARS CO2 pressure"            		 			 name: min_pCO2 value: cell min_of(each.pCO2 - each.frozenCO2);
+		monitor "Mean MARS CO2 pressure"                   			 name: mean_pCO2 value: cell mean_of(each.pCO2);
+		monitor "Varianve of MARS CO2 pressure"            			 name: var_pCO2 value: cell variance_of(each.pCO2);
+		monitor "Max MARS CO2 pressure"            		 			 name: max_pCO2 value: cell max_of(each.pCO2);
+		monitor "Min MARS CO2 pressure"            		 			 name: min_pCO2 value: cell min_of(each.pCO2);
 		
 		monitor "Sum of frozen CO2" 								 name: sum_frozenCO2 value: cell sum_of(each.frozenCO2 * delta_h2) * Pa2bar / ga;
 		monitor "Sum of energy" 								 	 name: sum_energy value: cell sum_of(each.energy);
@@ -660,7 +790,13 @@ experiment main_experiment until: (cycle > 6680)
 		monitor "Number of hexes with unfreezed water (T > 0 C)"     name: biosphere_hex      value: cell count(each.Ts > 273.15);
 		
 		monitor "Mean equatorial temperature"						 name: mean_equatorial_temp value: equ_list mean_of (each.Ts);
-		monitor "Mean pole temperature"						 		 name: mean_pole_temp value: poles_list mean_of (each.Ts);
+		monitor "Mean north pole temperature"						 name: mean_Npole_temp value: N_poles_list  mean_of (each.Ts);
+		monitor "Mean south pole temperature"						 name: mean_Spole_temp value: S_poles_list  mean_of (each.Ts);
+		monitor "Mean +45 temperature"						 		 name: mean_45p_temp value: _45p_poles_list  mean_of (each.Ts);
+		monitor "Mean -45 temperature"						 		 name: mean_45m_temp value: _45m_poles_list  mean_of (each.Ts);
+		
+		monitor "Daily insolation"									 name: daily_insol value: cell mean_of(each.insol);
+		monitor "Fitness"											 name: fit value: fitness;
 				
 		monitor "Sols"     name: solno value: cycle / 2 / step_sol ;
 		monitor "HN"     name: hn value: hadleyN;
@@ -672,3 +808,17 @@ experiment main_experiment until: (cycle > 6680)
 		
 	}
 }
+/* 
+experiment PSO type: batch keep_seed: true repeat: 1 until: ( cycle >= 6680 ) {
+    parameter 'Hadley heat transfer coeef' var: hadleyParam min: 1e-7 max: 10e-7 step: 1e-8;
+    parameter 'Soil thickness' var: soilDepth min: 1e-6 max: 10e-6 step: 1e-7;
+    parameter "co2 total" var: totalCO2 min: 0.0055 max: 0.0067 step: 0.0001;
+    parameter "log calib" var: log_calib;
+    
+	
+    method pso num_particles: 8 weight_inertia:0.7 weight_cognitive: 1.5 weight_social: 1.5  iter_max: 100  minimize: fitness  ; 
+    
+    output{
+    	monitor "Fitness"     name: fit value: fitness;
+    }
+} */
