@@ -18,7 +18,7 @@ global {
 	float R <- 0.19e-3; 		// [J kg-1 K-1] gas constant = 0.19×107 ergs gm-1 K-1
 	float S <- 2e-7;			// [K *m-1] static stability
 	float L <- 5.3e6;			// [m] equator-pole distance
-	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 K
+	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 
 	
 	float totalCO2 <- 0.006; // [bar] total amount of CO2 on Mars
 	float sumFrozen <- 0.0;
@@ -36,8 +36,8 @@ global {
     float Tincrease <- 0.0;
     
     int GHGregress <- 0;
-    float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter
-    //float Gamma_HT <- ga/cCO2; // 0.004751 wzór wg. Handbook on Atmospheric Diffusion
+    //float Gamma_HT <- 10/1000; // Kelvin / m - potential temperature parameter
+    float Gamma_HT <- ga/cCO2; // 0.004751 wzór wg. Handbook on Atmospheric Diffusion
      
 	float ecc <- 0.09341233; // eccentricity 
 	
@@ -60,6 +60,7 @@ global {
 	float fitness <- 1e12;
 	float yty_changes_RMSE <- 1e12;
 	float yty_diff <- 1e12;
+	float exp_param <- 1.25;  // parametr skalujący exp przy rozmrażaniu CO2
 	
 	float mape_tv1 <- 0.0;
 	float mape_pv1 <- 0.0;
@@ -79,6 +80,7 @@ global {
 	
 	float tauDust <- 0.0;
 	float albedoGlobal <- 0.2;	
+	float albedoIce <- 0.8;
 		
 	string outdir <- "../results/";
 	    
@@ -344,7 +346,7 @@ global {
     	}
 	}
 	
-	reflex rmse when: cycle mod (2 * step_sol * log_every_sol) = 1 {
+	reflex rmse when: log_calib and cycle mod (2 * step_sol * log_every_sol) = 1 {
 		float avgp <- cell mean_of(each.pCO2);
 		
 		rmse_avgt <- rmse_avgt + (calib[1, sol_year] - mean_greenhouse_temp)^2;
@@ -355,7 +357,7 @@ global {
 		
 	}
     
-    reflex reset_diff when: sol_year = 667 and cycle mod (2 * step_sol * log_every_sol) = 1{
+    reflex reset_diff when: log_calib and sol_year = 667 and cycle mod (2 * step_sol * log_every_sol) = 1{
 		mape_tv1 <- mape_tv1 / 358;
 		mape_pv1 <- mape_pv1 / 358;
 		
@@ -389,7 +391,7 @@ global {
 	}
     
     // check whether the difference in results in small enough
-   	reflex check_mtx when: year > 1 and sol_year = 0 {
+   	reflex check_mtx when: log_calib and year > 1 and sol_year = 0 {
    		yty_diff <- 0.0;
 		loop n over: cell {
 			yty_diff <- yty_diff + n.mtx_diff/4002;
@@ -571,7 +573,6 @@ species cell parallel: true {
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 					) ; 		
 		
-		loop n from: 0 to: 1{
 			prevTs <- Ts;
 			
 			pCO2 <- atmCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar];
@@ -585,10 +586,7 @@ species cell parallel: true {
 		
 			latentCO2 <- 0.0;
 
-			
-			if (abs(pCO2 - PsatCO2) < 1e-4) { break; }
-		
-			insol_en <- ( (frozenCO2 > 1e-8)?0.0:(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
+			insol_en <- ( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
 			//insol_en <- (1 - albedoGlobal ) * insol;  				// insolation ENERGY
 			//insol_en <- (1 - albedo) * insol;  				// insolation ENERGY
 			
@@ -605,16 +603,18 @@ species cell parallel: true {
 			// every cell has atmoshpere relating to pTotal
 			// pres of hex <- pTotal 
 			
-			if (id_cell = 1788 or id_cell = 333) {
-				write "<"+id_cell+"> ["+n+"] pCO2 = " + pCO2 + ", pSat = " + PsatCO2 + ", Ts = " + Ts + ", Tsat = " + Tsat;
-			}
+			//if (id_cell = 1788 or id_cell = 333) {
+			//	write "<"+id_cell+"> ["+n+"] pCO2 = " + pCO2 + ", pSat = " + PsatCO2 + ", Ts = " + Ts + ", Tsat = " + Tsat;
+			//}
 		
 			
 			if (pCO2 > PsatCO2){ // zbyt dużo CO2 - należy go "zabrać" z atmosfery i dodać do czapy lodowej
 										// energia hexa maleje
 										
 				
-				co2_excess <- totalCO2 * CO2freezingCoeff * (Tsat - Ts); // [bar] 
+				//co2_excess <- totalCO2 * CO2freezingCoeff * ln(Tsat/Ts); // [bar] 
+				co2_excess <- totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param));
+				
 				
 				if (co2_excess > atmCO2){
 					co2_excess <- atmCO2;
@@ -631,30 +631,29 @@ species cell parallel: true {
 // masa molowa CO2 - 44.0095 g/mol
 // The heat of sublimation for carbon dioxide = 32.3 kJ/mol * (1/44.0095) mol/g = 0,73393 kJ/g = 733,93 kJ/kg = 733932 J/kg
 
-				if (id_cell = 1788 or id_cell = 333) {
-					write "<"+id_cell+"> pCO2 > PsatCO2, co2_excess = " + co2_excess + ", latent en = " + latentCO2 + ", frozen = " + frozenCO2;
-					
-				}
+				//if (id_cell = 1788 or id_cell = 333) {
+				//	write "<"+id_cell+"> pCO2 > PsatCO2, co2_excess = " + co2_excess + ", latent en = " + latentCO2 + ", frozen = " + frozenCO2;
+				//	
+				//}
 
 						
 			} else if (pCO2  < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
-				co2_excess <- totalCO2 * CO2freezingCoeff * (Ts - Tsat); // [bar]
+				//co2_excess <- totalCO2 * CO2freezingCoeff * ln (Ts/Tsat); // [bar]
+				co2_excess <- totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param));
 				
 				if (co2_excess > frozenCO2){
 					co2_excess <- frozenCO2;
 				}
 				
 				frozenCO2 <- frozenCO2 - co2_excess; // w [bar] !!!
-				//sublimateCO2 <- co2_excess * delta_h2 * 289750 ; // energia resublimacji [J]
-				//sublimateCO2 <- co2_excess * 733932 *  delta_t/ 100; // energia resublimacji [Wm-2]	- bez mnozenia przez delta_h2 - energia per jednostka pow.
 				
 				// energia maleje			
-				latentCO2 <- latentCO2 - co2_excess * 613000* 4002;				
+				latentCO2 <- latentCO2 - co2_excess * 613000 * 4002;				
 
-				if (id_cell = 1788 or id_cell = 333) {
-					write "<"+id_cell+"> pCO2 < PsatCO2, co2_excess = " + (-co2_excess) + ", latent en = " + latentCO2 + ", frozen = " + frozenCO2;
-					
-				}
+				//if (id_cell = 1788 or id_cell = 333) {
+				//	write "<"+id_cell+"> pCO2 < PsatCO2, co2_excess = " + (-co2_excess) + ", latent en = " + latentCO2 + ", frozen = " + frozenCO2;
+				//	
+				//}
 
 			}
 			
@@ -666,7 +665,6 @@ species cell parallel: true {
 //										  Wm-2 1/ J*m-2*K-1                       + J*K-1*m-2
 //										  Wm-2 /K-1 * m2 * J-1
 //										  Ks-1 
-		}
 		
 		Tps <- Ts - Gamma_HT * height; // poprawka - zmiana znaku na "-" 2023-05-17
 							
@@ -675,7 +673,7 @@ species cell parallel: true {
 			
 	}
 
-	reflex diff_v1 when: id_cell = 333 and ( (sol_year >= 180 and sol_year <= 286) or (sol_year >= 303 and sol_year <= 553)){
+	reflex diff_v1 when: log_calib and id_cell = 333 and ( (sol_year >= 180 and sol_year <= 286) or (sol_year >= 303 and sol_year <= 553)){
 		//Vik 1
 		int offset <- 0;
 		if      (sol_year <= 286) {offset <- 180;}
@@ -690,7 +688,7 @@ species cell parallel: true {
 				
 	}
 	
-	reflex diff_v2 when: id_cell = 3090 and ( (sol_year >= 219 and sol_year <= 346) 
+	reflex diff_v2 when: log_calib and id_cell = 3090 and ( (sol_year >= 219 and sol_year <= 346) 
 										   or (sol_year >= 354 and sol_year <= 357)
 										   or (sol_year >= 362 and sol_year <= 596)
 	){
@@ -741,7 +739,7 @@ species cell parallel: true {
 			pres_mtx[1, sol_year] <- pCO2;
 		}
 	}
-	reflex check_diff when: year > 0 and sol_year = 667 {
+	reflex check_diff when: log_calib and year > 0 and sol_year = 667 {
 		mtx_diff <- 0.0;
 		loop s from: 0 to: 667 {
 			mtx_diff <- mtx_diff + (temp_mtx[1,s] - temp_mtx[0,s])^2/668 + (pres_mtx[1,s] - pres_mtx[0,s])^2/668;
@@ -767,7 +765,9 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Total CO2 on Mars" var: totalCO2;
 	parameter "Soil gray opacity" var: tauDust;
+	parameter "Exp freezing calibration param" var: exp_param;
 	parameter "Albedo" var: albedoGlobal;
+	parameter "Ice albedo" var: albedoIce;
 	parameter "Folder for result" var: outdir;	
 	parameter "Log output" var: log_output;
 	parameter "Log to CSV" var: log_csv;
