@@ -89,6 +89,7 @@ global {
 	bool log_csv <- false;
 	bool log_vik <- false;
 	bool log_calib <- false;
+	int log_first_year <- 0;   // first year that is logged to output
 	
 	float constrTemp <- 0.0;		// [K] temperature constr.
 	
@@ -249,7 +250,7 @@ global {
     /**
      * save data every year
      */
-    reflex saving_output when: log_output and (
+    reflex saving_output when: log_output and year >= log_first_year and (
     	cycle mod (2 * step_sol * log_every_sol) = 1 // or cycle mod 24 = 1
     	//cycle mod 56 = 1
     	) {    	
@@ -573,7 +574,12 @@ species cell parallel: true {
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 					) ; 		
 		
-			prevTs <- Ts;
+		prevTs <- Ts;
+		bool pCO2greater <- false;
+		bool check <- true;
+		float co2_excess_factor <- 1.0;
+		
+		loop times: 10 {
 			
 			pCO2 <- atmCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar];
 			if (pCO2 < 1e-8) {pCO2 <- 1e-8; }
@@ -608,16 +614,23 @@ species cell parallel: true {
 			//}
 		
 			
+			
 			if (pCO2 > PsatCO2){ // zbyt dużo CO2 - należy go "zabrać" z atmosfery i dodać do czapy lodowej
 										// energia hexa maleje
-										
+				pCO2greater <- true;							
 				
 				//co2_excess <- totalCO2 * CO2freezingCoeff * ln(Tsat/Ts); // [bar] 
-				co2_excess <- totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param));
+				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param)) / 2 ;
 				
 				
-				if (co2_excess > atmCO2){
-					co2_excess <- atmCO2;
+				// Arhenius equation: A~10^10, Ea~30kJ/mol, MolMass = 44.0095
+				//co2_excess <- CO2freezingCoeff * 10^10 * exp(-30000/(8.314462 * Ts))*44.0095/1000 / (marsArea / 4002);
+				
+				if (co2_excess > totalCO2/numOfHexes) {
+					co2_excess <- totalCO2/numOfHexes;
+				}
+				if (co2_excess > (atmCO2/4002)){
+					co2_excess <- atmCO2/4002;
 				}
 				
 				frozenCO2 <- frozenCO2 + co2_excess; // [bar]
@@ -638,9 +651,16 @@ species cell parallel: true {
 
 						
 			} else if (pCO2  < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
-				//co2_excess <- totalCO2 * CO2freezingCoeff * ln (Ts/Tsat); // [bar]
-				co2_excess <- totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param));
+			
+				pCO2greater <- false;
 				
+				//co2_excess <- totalCO2 * CO2freezingCoeff * ln (Ts/Tsat); // [bar]
+				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param));
+				//co2_excess <- CO2freezingCoeff * 10^10 * exp(-30000/(8.314462 * Ts))*44.0095/1000/ (marsArea / 4002);
+				
+				if (co2_excess > totalCO2/numOfHexes) {
+					co2_excess <- totalCO2/numOfHexes;
+				}
 				if (co2_excess > frozenCO2){
 					co2_excess <- frozenCO2;
 				}
@@ -666,6 +686,15 @@ species cell parallel: true {
 //										  Wm-2 /K-1 * m2 * J-1
 //										  Ks-1 
 		
+		
+			// check if co2_excess is too large
+			float tmpPsatCO2 <- 1.2264e7 * exp(-3167.8 / Ts);
+			float tmpPCO2 <- (atmCO2 + co2_excess * (pCO2greater?(1.0):(-1.0)) ) * exp(- height / 10000);
+			
+			if ( (tmpPCO2 > tmpPsatCO2 and pCO2greater) or (tmpPCO2 < tmpPsatCO2 and !pCO2greater)) {break; }
+			else {co2_excess_factor <- co2_excess_factor * 0.5; }
+		} 
+
 		Tps <- Ts - Gamma_HT * height; // poprawka - zmiana znaku na "-" 2023-05-17
 							
 		heat_flux <- heat_flux - energy;	// obliczenie przepływu - różnicowo, pewnie trzeba dodać sol * delta_h, ale to później
@@ -753,6 +782,7 @@ experiment main_experiment until: (cycle > 6680)
 	
 	parameter "Start sollon" var: sollon_number min: 0 max: 45;
 	parameter "Log every sol" var: log_every_sol;
+	parameter "Log from the year no" var: log_first_year;
 	parameter "Selected cell" var: selected_cell;
 	parameter "Selected cells" var: selected_cells;
 	parameter "Sublimation paramter" var: CO2freezingCoeff;
