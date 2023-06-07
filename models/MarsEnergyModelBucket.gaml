@@ -20,7 +20,7 @@ global {
 	float L <- 5.3e6;			// [m] equator-pole distance
 	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 
 	
-	float totalCO2 <- 0.006; // [bar] total amount of CO2 on Mars
+	float totalCO2 <- 0.007; // [bar] total amount of CO2 on Mars
 	float sumFrozen <- 0.0;
 	float atmCO2 <- totalCO2 - sumFrozen;
 	//float sumFrozen update: cell sum_of(each.frozenCO2); 
@@ -29,7 +29,7 @@ global {
 	int aspect_mode <- 1;				// tryb wyświetlania
 	int sollon_number <- 0;
     int model_number <- 3;
-    int selected_cell <- 333;
+    int selected_cell <- 1788;
     list<int> selected_cells <- [1788, 2859];
     
     int numOfHexes <- 4002;
@@ -60,7 +60,6 @@ global {
 	float fitness <- 1e12;
 	float yty_changes_RMSE <- 1e12;
 	float yty_diff <- 1e12;
-	float exp_param <- 1.25;  // parametr skalujący exp przy rozmrażaniu CO2
 	
 	float mape_tv1 <- 0.0;
 	float mape_pv1 <- 0.0;
@@ -80,7 +79,7 @@ global {
 	
 	float tauDust <- 0.0;
 	float albedoGlobal <- 0.2;	
-	float albedoIce <- 0.8;
+	float albedoIce <- 0.5;
 		
 	string outdir <- "../results/";
 	    
@@ -91,7 +90,7 @@ global {
 	bool log_calib <- false;
 	int log_first_year <- 0;   // first year that is logged to output
 	
-	float constrTemp <- 0.0;		// [K] temperature constr.
+	float constrTemp <- 50.0;		// [K] temperature constr.
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float ga <- 3.72076; 			// Mars gravitional acceleration [ms-2] [Nkg-1]
@@ -106,7 +105,7 @@ global {
 
 	float cCO2 <- 783.0; // specific heat cappacity for CO2 [J kg-1 K-1] - in 220 [K] https://en.wikipedia.org/wiki/Carbon_dioxide
 	float cSoil <- 980.0;  // specific heat cappacity for soil (desert sand) [J kg-1 K-1] https://aip.scitation.org/doi/pdf/10.1063/1.4949109
-	float soilDepth <- 0.71; // [m]
+	float soilDepth <- 2.0; // [m]
 	float soilDensity <- 1600; // [kg m-3]
 	float emissivity <- 0.9; // [W m-2]
 	
@@ -116,12 +115,12 @@ global {
 	float Kcoeff <- 10000.0;
 	float K_ <- Kcoeff * delta_t / delta_h2 / step_sol; // K * delta_t / delta_h2
 	float Wind <- 0.0;
-	
+	float initFrozen <- 0.0;		// część początkowa zamrożonego CO2
 		
    	float hadleyN <- 0.0;
    	float hadleyS <- 0.0;
    	//float hadleyParam <- 5e-9;
-   	float hadleyParam <- 1e-10;
+   	float hadleyParam <- 0.000000005;
    		
 	int martianYear <- 668; // martian year [sol]
 	float Pa2bar <- 1e5;			// pascal to bar
@@ -159,7 +158,7 @@ global {
 	int biosphere_hex <- 0; 			// number of hexes unfreezed water (T > 0 C)
 	
     
-	float CO2freezingCoeff <- 0.0000015 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
+	float CO2freezingCoeff <- 0.00001 / step_sol; // percentage part of CO2 being sublimated / resublimated per sol
     
     list<cell> N_poles_list <- nil;
     list<cell> S_poles_list <- nil;
@@ -197,6 +196,7 @@ global {
 				int atmp; 
 				albedo <- mat_albedo[id_cell-1];
 				hadley_ht <- mat_hadley[id_cell-1];
+				frozenCO2 <- totalCO2 * initFrozen / numOfHexes;
 								
   				location <- {longitude, latitude};
     			neigh <- [n1, n2, n3, n4, n5, n6];
@@ -620,15 +620,14 @@ species cell parallel: true {
 				pCO2greater <- true;							
 				
 				//co2_excess <- totalCO2 * CO2freezingCoeff * ln(Tsat/Ts); // [bar] 
-				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param)) / 2 ;
+				//co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param))  ;
+				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Tsat - Ts )  ;
 				
 				
 				// Arhenius equation: A~10^10, Ea~30kJ/mol, MolMass = 44.0095
 				//co2_excess <- CO2freezingCoeff * 10^10 * exp(-30000/(8.314462 * Ts))*44.0095/1000 / (marsArea / 4002);
 				
-				if (co2_excess > totalCO2/numOfHexes) {
-					co2_excess <- totalCO2/numOfHexes;
-				}
+				
 				if (co2_excess > (atmCO2/4002)){
 					co2_excess <- atmCO2/4002;
 				}
@@ -648,19 +647,18 @@ species cell parallel: true {
 				//	write "<"+id_cell+"> pCO2 > PsatCO2, co2_excess = " + co2_excess + ", latent en = " + latentCO2 + ", frozen = " + frozenCO2;
 				//	
 				//}
-
+				
 						
 			} else if (pCO2  < PsatCO2){ // za mało CO2 - jeśli jest czapa lodowa - zabieramy trochę CO2 z czapy
 			
 				pCO2greater <- false;
 				
 				//co2_excess <- totalCO2 * CO2freezingCoeff * ln (Ts/Tsat); // [bar]
-				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param));
+				//co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param)) ;
 				//co2_excess <- CO2freezingCoeff * 10^10 * exp(-30000/(8.314462 * Ts))*44.0095/1000/ (marsArea / 4002);
+				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Ts - Tsat ) ;
 				
-				if (co2_excess > totalCO2/numOfHexes) {
-					co2_excess <- totalCO2/numOfHexes;
-				}
+				
 				if (co2_excess > frozenCO2){
 					co2_excess <- frozenCO2;
 				}
@@ -679,21 +677,36 @@ species cell parallel: true {
 			
 			energy <- insol_en - rad_en + green_en + eddy_Ts + hadley_Ts  + latentCO2;  // latent heat
 							   
-			Ts <- prevTs			// previous step temp. 
+			float tmpTs <- prevTs			// previous step temp. 
 				+  energy * delta_t / (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
 //										  Wm-2 / J*kg-1*K-1 *  kg * m-2          + J*kg-1*K-1 * m         * kg * m-3
 //										  Wm-2 1/ J*m-2*K-1                       + J*K-1*m-2
 //										  Wm-2 /K-1 * m2 * J-1
 //										  Ks-1 
-		
+			if (tmpTs < constrTemp) {
+				tmpTs <- constrTemp;
+			}
 		
 			// check if co2_excess is too large
-			float tmpPsatCO2 <- 1.2264e7 * exp(-3167.8 / Ts);
+			float tmpPsatCO2 <- 1.2264e7 * exp(-3167.8 / tmpTs);
 			float tmpPCO2 <- (atmCO2 + co2_excess * (pCO2greater?(1.0):(-1.0)) ) * exp(- height / 10000);
 			
 			if ( (tmpPCO2 > tmpPsatCO2 and pCO2greater) or (tmpPCO2 < tmpPsatCO2 and !pCO2greater)) {break; }
-			else {co2_excess_factor <- co2_excess_factor * 0.5; }
+			//if (pCO2greater or (tmpPCO2 < tmpPsatCO2 and !pCO2greater)) {break; }
+			//if (abs(tmpPCO2 - tmpPsatCO2 ) < 1e-2) { break; }
+			else {
+				co2_excess_factor <- co2_excess_factor * 0.5; 
+			}
 		} 
+		Ts <- prevTs			// previous step temp. 
+				+  energy * delta_t / (cCO2       * pCO2 + cSoil     * soilDepth * soilDensity); // mass m-2 * conduction - without multiplication by area - its flux
+//										  Wm-2 / J*kg-1*K-1 *  kg * m-2          + J*kg-1*K-1 * m         * kg * m-3
+//										  Wm-2 1/ J*m-2*K-1                       + J*K-1*m-2
+//										  Wm-2 /K-1 * m2 * J-1
+//										  Ks-1 
+		if (Ts < constrTemp) {
+			Ts <- constrTemp;
+		}
 
 		Tps <- Ts - Gamma_HT * height; // poprawka - zmiana znaku na "-" 2023-05-17
 							
@@ -795,7 +808,6 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Total CO2 on Mars" var: totalCO2;
 	parameter "Soil gray opacity" var: tauDust;
-	parameter "Exp freezing calibration param" var: exp_param;
 	parameter "Albedo" var: albedoGlobal;
 	parameter "Ice albedo" var: albedoIce;
 	parameter "Folder for result" var: outdir;	
