@@ -18,7 +18,14 @@ global {
 	float R <- 0.19e-3; 		// [J kg-1 K-1] gas constant = 0.19×107 ergs gm-1 K-1
 	float S <- 2e-7;			// [K *m-1] static stability
 	float L <- 5.3e6;			// [m] equator-pole distance
-	float ro <- 2.4733;		// [kg m-3] CO2 density in 220 
+	float ro <- 2.4733;		// [kg m-3] CO2 density in 220
+	float south_dsg <- 0.0; 
+	float north_dsg <- 0.0; 
+	float total_sg  <- 0.0;  // total sun glasses
+	float solar_const_modifier <- 1.0;
+	
+	float GHG_A <- 0.004;
+	float GHG_B <- 0.4551;
 	
 	float totalCO2 <- 0.007; // [bar] total amount of CO2 on Mars
 	float sumFrozen <- 0.0;
@@ -89,6 +96,9 @@ global {
 	bool log_vik <- false;
 	bool log_calib <- false;
 	int log_first_year <- 0;   // first year that is logged to output
+	bool sunGlass_Ice <- false;		// put sunglasses when ice only - 1, on constant set of hexes - 0
+	bool constSumGlass <- true; // czy "okulary" sa ustawione na stałe (true), czy zależą od pokrywy lodowej (false)
+	bool variableTauDust <- false;
 	
 	float constrTemp <- 50.0;		// [K] temperature constr.
 	
@@ -206,6 +216,21 @@ global {
 				if (spec = 1) {
 					remove index: 5 from: neigh;
 					remove index: 5 from: azim;
+				}
+				
+				if (constSumGlass){
+					if (id_cell in [1751, 1752, 1753, 1769, 1770, 1771, 1772, 1787, 1788, 1789, 1790, 1791, 1835, 1844, 1845, 1854, 1855, 1865, 1866]){
+						dustSunGlasses <- south_dsg;
+					}
+					if (id_cell in [2841,2849,49,2858,59,2850,2859,58,2869,69,2860,2870,68,2871,80,2881,79,2882,2883]) {
+						dustSunGlasses <- north_dsg;
+					}	
+				} else {
+					if (latitude > 0) {
+						dustSunGlasses <- north_dsg;
+					} else if (latitude < 0) {
+						dustSunGlasses <- south_dsg;
+					}
 				}
 				
 				
@@ -434,7 +459,8 @@ species cell parallel: true {
 	float height;
 	float zonal_wind;
 	float merid_wind;
-	
+	float dustSunGlasses <- 0.0;
+
 	float atm_press;
 	int spec;
 	
@@ -482,7 +508,8 @@ species cell parallel: true {
 	float hadley_ht <- 0.0;
 	
 	float insol;
-		
+	float tauDustN;
+	
 	float kat;
 	float zachSlonca;
 	float OMEGA;
@@ -508,7 +535,9 @@ species cell parallel: true {
 		draw circle(1.0) at: {(longitude+180.0)/3.6, (latitude+90.0)/1.8} color: rgb(0, (co2_column - 80)/2.0, 0) border: #black;	
 	}
 	aspect plain_Ts{
-		draw circle(1.0) at: {(longitude+180.0)/3.6, (latitude+90.0)/1.8} color: id_cell = selected_cell?#green:(frozenCO2>1e-8?#white:rgb((Ts - 120), 0, 0)) border: #black;	
+		draw circle(1.0) at: {(longitude+180.0)/3.6, (latitude+90.0)/1.8} color: id_cell = selected_cell?#green:(frozenCO2>1e-8?#white:
+			(Ts >= 273?#green:rgb((Ts - 120), 0, 0))
+			) border: #black;	
 	}
 	aspect plain_energy{
 		draw circle(1.0) at: {(longitude+180.0)/3.6, (latitude+90.0)/1.8} color: rgb(energy/3.0, 0, -energy/3.0) border: #black;	
@@ -569,7 +598,7 @@ species cell parallel: true {
 			liczbaGodzSlonecznych <- OMEGA * 2.0/15.0;
 		}
 		
-		insol <- (1.0/#pi) * S0 * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
+		insol <- (1.0/#pi) * S0 * solar_const_modifier * ((1 + e * cos((sol_lon - 248) mod 360))^2) / ((1 - e^2)^2) 
 					* max(0.0, sin(fi) * sin(nachylenieOsi) * sin(sol_lon) 
 					* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 					) ; 		
@@ -578,6 +607,7 @@ species cell parallel: true {
 		bool pCO2greater <- false;
 		bool check <- true;
 		float co2_excess_factor <- 1.0;
+		tauDustN <- tauDust;
 		
 		loop times: 10 {
 			
@@ -586,13 +616,22 @@ species cell parallel: true {
 			PsatCO2 <- 1.2264e7 * exp(-3167.8 / Ts); 
 			Tsat <- -3167.8 / ln (pCO2 / 1.2264e7); // temperatura nasyceina - jaka powinna być wzgledem ciśnienia
 			
+			if (variableTauDust){
+				tauDustN <-  tauDust * pCO2 / atmCO2;	
+			}		
 			
-			tCO2 <- 0.004 * ((pCO2)* Pa2bar / ga )^0.4551;
-			tau <- tCO2 + tauDust;
+			//tCO2 <- 0.004 * ((pCO2)* Pa2bar / ga )^0.4551;
+			tCO2 <- GHG_A * ((pCO2)* Pa2bar / ga )^GHG_B;
+			tau <- tCO2 + tauDustN;
 		
 			latentCO2 <- 0.0;
-
-			insol_en <- ( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
+			
+			if (!sunGlass_Ice) { // sunGlass_Ice == 0
+				insol_en <- (1.0 - dustSunGlasses) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY	
+			} else { // sunGlass_Ice == 1
+				insol_en <- (1.0 - ( (frozenCO2 > 1e-8)?dustSunGlasses:0.0)) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
+			}
+			insol_en <- insol_en * (1.0 - total_sg);
 			//insol_en <- (1 - albedoGlobal ) * insol;  				// insolation ENERGY
 			//insol_en <- (1 - albedo) * insol;  				// insolation ENERGY
 			
@@ -810,6 +849,16 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil gray opacity" var: tauDust;
 	parameter "Albedo" var: albedoGlobal;
 	parameter "Ice albedo" var: albedoIce;
+	parameter "Total sunglasses" var: total_sg;
+	parameter "Put sunglasses when ice only" var: sunGlass_Ice;
+	parameter "Dust subglasses on south pole" var: south_dsg;
+	parameter "Dust subglasses on north pole" var: north_dsg;
+	parameter "Constant (true) or ice-dependent (false) dust subglasses" var: constSumGlass;
+	parameter "Variable Tau Dust: 0 - constant, 1 - variable" var: variableTauDust;
+	parameter "solar constant modifier" var: solar_const_modifier;
+	parameter "GHG A" var: GHG_A;
+	parameter "GHG B" var: GHG_B;
+	
 	parameter "Folder for result" var: outdir;	
 	parameter "Log output" var: log_output;
 	parameter "Log to CSV" var: log_csv;
@@ -845,7 +894,7 @@ experiment main_experiment until: (cycle > 6680)
 				data "Greenhouse Energy" value: greenEn color: #green;
 				data "Radiation Energy" value: radEn color: #red;
 				data "Insolation Energy" value: insolEn color: #orange;
-				//data "Preserved Energy" value: prevEn color: #gray;
+				data "Preserved Energy" value: prevEn color: #gray;
 				data "Eddy Energy"  value: eddyEn color: #purple;
 				data "Hadley Energy" value: hadEn color: #cyan;
 	
@@ -917,6 +966,11 @@ experiment main_experiment until: (cycle > 6680)
 		monitor "Mean south pole temperature"						 name: mean_Spole_temp value: S_poles_list  mean_of (each.Ts);
 		monitor "Mean +45 temperature"						 		 name: mean_45p_temp value: _45p_poles_list  mean_of (each.Ts);
 		monitor "Mean -45 temperature"						 		 name: mean_45m_temp value: _45m_poles_list  mean_of (each.Ts);
+		
+		monitor "Vik 1 temperature"									 name: vik1_temp value: cell[333].Ts; 
+		monitor "Vik 2 temperature"									 name: vik2_temp value: cell[3090].Ts; 
+		monitor "Vik 1 pressure"									 name: vik1_pres value: cell[333].pCO2; 
+		monitor "Vik 2 pressure"									 name: vik2_pres value: cell[3090].pCO2; 
 		
 		monitor "Daily insolation"									 name: daily_insol value: cell mean_of(each.insol);
 		monitor "Fitness"											 name: fit value: fitness;

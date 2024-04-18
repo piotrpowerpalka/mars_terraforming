@@ -50,7 +50,7 @@ global{
 								* OMEGA * 2 * #pi / 360.0 + cos(fi) * cos(kat) * sin(OMEGA)
 								) / 24;
 		
-					write "" + sl + ";" + lat + ";" + insol;
+					//write "" + sl + ";" + lat + ";" + insol;
 					
 				}
 			}
@@ -76,7 +76,9 @@ experiment Matrices {
 	output {
 		display mars_plain_co2 type: opengl ambient_light: 100 background: #white  {
 			species xxx aspect: base;
+		
 		}
+		
 	}
 }
 

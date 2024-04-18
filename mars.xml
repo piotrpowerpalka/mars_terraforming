@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <Experiment_plan>
-	<Simulation id="1" sourcePath="models/MarsChrisSimple2.gaml" finalStep="2672" experiment="main_experiment">
+	<Simulation id="1" sourcePath="models/MarsChrisSimple2.gaml" finalStep="6680" experiment="main_experiment">
 	  <Parameters>
 		<Parameter name="CO2freezingCoeff" type="FLOAT" value="0.01" />
 		<Parameter name="CO2defreezingCoeff" type="FLOAT" value="0.01" />
-		<Parameter name="selected_cell" type="INT" value="333" />
-		<Parameter name="Kcoeff" type="FLOAT" value="0.0" />
-		<Parameter name="hadleyParam" type="FLOAT" value="0.0" />
-		<Parameter name="soilDepth" type="FLOAT" value="0.0001" />
-		<Parameter name="outdir" type="STRING" value="../results/run_2023-02-09_1" />
+		<Parameter name="emissivity" type="FLOAT" value="0.97" />
+		
+		<Parameter name="log_output" type="INT" value="1"/>
+		<Parameter name="outdir" type="STRING" value="../results/test-2023-03-15" />
 	  </Parameters>
 	  <Outputs>
 	  </Outputs>
