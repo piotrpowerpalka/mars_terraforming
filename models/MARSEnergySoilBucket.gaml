@@ -189,11 +189,11 @@ global {
     	
 		if (hadleyModel = 0) {
 			csv_hadley <- csv_file("../includes/hadley_heat_transport.csv",",",float,true);
-			matrix<float> mat_hadley <- matrix<float>(csv_hadley.contents);			
+			mat_hadley <- matrix<float>(csv_hadley.contents);			
 		}
 		if (hadleyModel = 2) {
-			csv_hadley <- csv_file("../includes/hadley_new.csv",",",float,true);
-			matrix<float> mat_hadley <- matrix<float>(csv_hadley.contents);
+			csv_hadley <- csv_file("../includes/hudley_new.csv",",",float,true);
+			mat_hadley <- matrix<float>(csv_hadley.contents);
 		}
 		if (hadleyModel = 1) {
 			file hadley_al_csv <- csv_file("../includes/hudley_al.csv",";",float,true);
@@ -242,6 +242,7 @@ global {
 				albedo <- mat_albedo[id_cell-1];
 				if (hadleyModel = 0 or hadleyModel = 2){
 					hadley_ht <- mat_hadley[id_cell-1];	
+					write mat_hadley[id_cell - 1];
 				}
 				frozenCO2 <- totalCO2 * initFrozen / numOfHexes;
 								
@@ -764,7 +765,12 @@ species cell parallel: true {
 
 			}
 			
-			ground_delta_En <- k_reg   * (prevTs - subground_Ts) / deepSoil;
+			if (latitude < 75 and latitude > -75){
+				ground_delta_En <- k_reg   * (prevTs - subground_Ts) / deepSoil;
+			} else {
+				ground_delta_En <- k_reg * 0.25 * (prevTs - subground_Ts) / deepSoil;
+			}
+			
 		 	if (deepGroundModel = 0) { // jeśli tryb bez modelu głębokiego - zreruj
 		 		ground_delta_En <- 0.0;
 		 	}	//W m-2			// W m-1 K-1      W m-2                          m-2 = W2 m-5 K-1  
