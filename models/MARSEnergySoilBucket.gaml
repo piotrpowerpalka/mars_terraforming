@@ -26,6 +26,8 @@ global {
 	float k_reg <- 1.0; // 0.0837;  // thermal conductivity of soil [W m-1 K-1]
 	float deepSoil <- 3.47; // 60.0; // [m] - grubość gruntu głębokiego
 	float initDeepGrdTemp <- 212.0; // [K] - initial deep ground temp.
+	float kreg_mod <- 1.0;		// k regolith modifier for areas near poles
+	float kreg_lat <- 90.0;		// from what lattitude, the kreg_mod will be modified
 	
 	float GHG_A <- 0.004;
 	float GHG_B <- 0.4551;
@@ -765,10 +767,10 @@ species cell parallel: true {
 
 			}
 			
-			if (latitude < 75 and latitude > -75){
+			if (latitude <= kreg_lat and latitude >= -kreg_lat){
 				ground_delta_En <- k_reg   * (prevTs - subground_Ts) / deepSoil;
 			} else {
-				ground_delta_En <- k_reg * 0.25 * (prevTs - subground_Ts) / deepSoil;
+				ground_delta_En <- k_reg * kreg_mod * (prevTs - subground_Ts) / deepSoil;
 			}
 			
 		 	if (deepGroundModel = 0) { // jeśli tryb bez modelu głębokiego - zreruj
@@ -928,6 +930,9 @@ experiment main_experiment until: (cycle > 6680)
 //	parameter "Deep soil mass modificator" var: soilMassMod;
 	parameter "Hudely model, 0-simple, 1-Alison" var: hadleyModel;
 	parameter "Deep ground model, 0-none, 1-exists" var: deepGroundModel;
+	parameter "K regolith modifier for areas near the poles" var: kreg_mod;
+	parameter "Boundary lattitudes for K regolith modifier" var: kreg_lat;
+	
 
 	parameter "Soil emissivity" var: emissivity;
 	parameter "Total CO2 on Mars" var: totalCO2;
