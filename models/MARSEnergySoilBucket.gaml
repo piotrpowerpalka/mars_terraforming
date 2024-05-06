@@ -28,6 +28,8 @@ global {
 	float initDeepGrdTemp <- 212.0; // [K] - initial deep ground temp.
 	float kreg_mod <- 1.0;		// k regolith modifier for areas near poles
 	float kreg_lat <- 90.0;		// from what lattitude, the kreg_mod will be modified
+	float ndsg_lat <- 90.0;
+	float sdsg_lat <- -90.0;
 	
 	float GHG_A <- 0.004;
 	float GHG_B <- 0.4551;
@@ -105,8 +107,9 @@ global {
 	bool log_vik <- false;
 	bool log_calib <- false;
 	int log_first_year <- 0;   // first year that is logged to output
-	bool sunGlass_Ice <- false;		// put sunglasses when ice only - 1, on constant set of hexes - 0
-	bool constSumGlass <- true; // czy "okulary" sa ustawione na stałe (true), czy zależą od pokrywy lodowej (false)
+	bool sunGlass_Ice <- false;		// on constant set of hexes: 0, put sunglasses when ice only: 1
+	int sun_glass_param <- 0; // 0: czy "okulary" sa ustawione: 0: na stałych hexach (numery), 1: zależnie od kreg_lat, 2: czy zależą od pokrywy lodowej (false)
+	int sun_glass_mode <- 0;  // 0: okulary takie same w zadanym rejonie, 1: sinus od 0 (kreg_lat) do 1 (biegun)
 	bool variableTauDust <- false;
 	
 	float constrTemp <- 50.0;		// [K] temperature constr.
@@ -260,17 +263,33 @@ global {
 					remove index: 5 from: azim;
 				}
 				
-				if (constSumGlass){
-					if (latitude < -kreg_lat) {
+				if (sun_glass_param = 0){
+					if (id_cell in [1751, 1752, 1753, 1769, 1770, 1771, 1772, 1787, 1788, 1789, 1790, 1791, 1835, 1844, 1845, 1854, 1855, 1865, 1866]){
 						dustSunGlasses <- south_dsg;
-					}
-					//if (id_cell in [1751, 1752, 1753, 1769, 1770, 1771, 1772, 1787, 1788, 1789, 1790, 1791, 1835, 1844, 1845, 1854, 1855, 1865, 1866]){
-					//	dustSunGlasses <- south_dsg;
-					//}
-					if (id_cell in [2841,2849,49,2858,59,2850,2859,58,2869,69,2860,2870,68,2871,80,2881,79,2882,2883]) {
+					} 
+					if (id_cell in [2841, 2849, 49, 2858, 59, 2850, 2859, 58, 2869, 69, 2860, 2870, 68, 2871, 80, 2881, 79, 2882, 2883]) {
 						dustSunGlasses <- north_dsg;
-					}	
-				} else {
+					}
+				} else if (sun_glass_param = 1) {
+					if (latitude < sdsg_lat) { // sdsg_lat jest ujemne
+						if (sun_glass_mode = 0){
+							dustSunGlasses <- south_dsg;	
+						}
+						if (sun_glass_mode = 1) {
+							dustSunGlasses <- sin(90.0*(abs(latitude) + sdsg_lat)/(90.0 + sdsg_lat)) * south_dsg;
+						}
+						
+					} 
+					if (latitude > ndsg_lat){
+						if (sun_glass_mode = 0){
+							dustSunGlasses <- north_dsg;	
+						}
+						if (sun_glass_mode = 1) {
+							dustSunGlasses <- sin(90.0*(abs(latitude) - ndsg_lat)/(90.0 - ndsg_lat)) * north_dsg;
+						}
+					}
+				} else if (sun_glass_param = 2) {
+					
 					if (latitude > 0) {
 						dustSunGlasses <- north_dsg;
 					} else if (latitude < 0) {
@@ -682,7 +701,7 @@ species cell parallel: true {
 		
 			latentCO2 <- 0.0;
 			
-			if (!sunGlass_Ice) { // sunGlass_Ice == 0
+			if (sunGlass_Ice = 0) { // sunGlass_Ice == 0
 				insol_en <- (1.0 - dustSunGlasses) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY	
 			} else { // sunGlass_Ice == 1
 				insol_en <- (1.0 - ( (frozenCO2 > 1e-8)?dustSunGlasses:0.0)) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
@@ -946,9 +965,12 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Put sunglasses when ice only" var: sunGlass_Ice;
 	parameter "Dust subglasses on south pole" var: south_dsg;
 	parameter "Dust subglasses on north pole" var: north_dsg;
-	parameter "Constant (true) or ice-dependent (false) dust subglasses" var: constSumGlass;
+	parameter "North latitude of pole" var: ndsg_lat;
+	parameter "South latitude of pole" var: sdsg_lat;
+	parameter "Constant (true) or ice-dependent (false) dust subglasses" var: sun_glass_param;
 	parameter "Variable Tau Dust: 0 - constant, 1 - variable" var: variableTauDust;
 	parameter "solar constant modifier" var: solar_const_modifier;
+	parameter "solar pole glass mode" var: sun_glass_mode;
 	parameter "GHG A" var: GHG_A;
 	parameter "GHG B" var: GHG_B;
 	
@@ -989,11 +1011,10 @@ experiment main_experiment until: (cycle > 6680)
 				data "Greenhouse Energy" value: greenEn color: #green;
 				data "Radiation Energy" value: radEn color: #red;
 				data "Insolation Energy" value: insolEn color: #orange;
-				data "Preserved Energy" value: prevEn color: #gray;
+//				data "Preserved Energy" value: prevEn color: #gray;
 				data "Eddy Energy"  value: eddyEn color: #purple;
 				data "Hadley Energy" value: hadEn color: #cyan;
-	
-				
+				data "Ground Energy" value: grEn color: #orange;			
 			}
 		}
 		/*display chart6 refresh: every(2#cycles) {
