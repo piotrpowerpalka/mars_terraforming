@@ -30,6 +30,7 @@ global {
 	float kreg_lat <- 90.0;		// from what lattitude, the kreg_mod will be modified
 	float ndsg_lat <- 90.0;
 	float sdsg_lat <- -90.0;
+	float spCO2defreze <- 12.5e-6;	// south pole CO2 deffreze param
 	
 	float GHG_A <- 0.004;
 	float GHG_B <- 0.4551;
@@ -111,7 +112,7 @@ global {
 	int sun_glass_param <- 0; // 0: czy "okulary" sa ustawione: 0: na stałych hexach (numery), 1: zależnie od kreg_lat, 2: czy zależą od pokrywy lodowej (false)
 	int sun_glass_mode <- 0;  // 0: okulary takie same w zadanym rejonie, 1: sinus od 0 (kreg_lat) do 1 (biegun)
 	bool variableTauDust <- false;
-	
+	float scaleHeight <- 11600; //[m] 
 	float constrTemp <- 50.0;		// [K] temperature constr.
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
@@ -133,7 +134,7 @@ global {
 	
 	float delta_t <- 88775.0;		// 1 martian sol [s]
 	float delta_h2 <-  marsArea / numOfHexes;	// area of single hex
-	float delta_h <- delta_h2 / #pi;			// radius of single hex (approx.)
+	float delta_h <- sqrt(delta_h2 / #pi);			// radius of single hex (approx.)
 	float Kcoeff <- 10000.0;
 	float K_ <- Kcoeff * delta_t / delta_h2 / step_sol; // K * delta_t / delta_h2
 	float Wind <- 0.0;
@@ -276,7 +277,7 @@ global {
 							dustSunGlasses <- south_dsg;	
 						}
 						if (sun_glass_mode = 1) {
-							dustSunGlasses <- sin(90.0*(abs(latitude) + sdsg_lat)/(90.0 + sdsg_lat)) * south_dsg;
+							dustSunGlasses <- sin(90*(abs(latitude) + sdsg_lat)/(90.0 + sdsg_lat)) * south_dsg;
 						}
 						
 					} 
@@ -285,7 +286,7 @@ global {
 							dustSunGlasses <- north_dsg;	
 						}
 						if (sun_glass_mode = 1) {
-							dustSunGlasses <- sin(90.0*(abs(latitude) - ndsg_lat)/(90.0 - ndsg_lat)) * north_dsg;
+							dustSunGlasses <- sin(90*(abs(latitude) - ndsg_lat)/(90.0 - ndsg_lat)) * north_dsg;
 						}
 					}
 				} else if (sun_glass_param = 2) {
@@ -550,7 +551,7 @@ species cell parallel: true {
 	
 	// meanCO2 - frozenTotal 
 	// pTotal = pA + froz + poles
-	float pCO2 <- 0.0; // update: atmCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar]
+	float pCO2 <- 0.0; // update: atmCO2 * exp(- height / scaleHeight); // 0.006 * exp(- height / scaleHeight); // Pressure in [bar]
 	
 	float PsatCO2 <- 0.0; // update: 1.2264e7 * exp(-3167.8 / Ts); //[bar] za Reference this from Eq 19 in Fanale et al. (1982) Fanale, F.P., Salvail, J.R., Banerdt, W.B. and 
 													// Saunders, R.S., 1982. Mars: The regolith-atmosphere-cap system and climate 
@@ -686,7 +687,7 @@ species cell parallel: true {
 		
 		loop times: 10 {
 			
-			pCO2 <- atmCO2 * exp(- height / 10000); // 0.006 * exp(- height / 10000); // Pressure in [bar];
+			pCO2 <- atmCO2 * exp(- height / scaleHeight ); // 0.006 * exp(- height / scaleHeight); // Pressure in [bar];
 			if (pCO2 < 1e-8) {pCO2 <- 1e-8; }
 			PsatCO2 <- 1.2264e7 * exp(-3167.8 / Ts); 
 			Tsat <- -3167.8 / ln (pCO2 / 1.2264e7); // temperatura nasyceina - jaka powinna być wzgledem ciśnienia
@@ -735,7 +736,11 @@ species cell parallel: true {
 				
 				//co2_excess <- totalCO2 * CO2freezingCoeff * ln(Tsat/Ts); // [bar] 
 				//co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Tsat/Ts) - exp(exp_param))  ;
-				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Tsat - Ts )  ;
+				if (latitude < sdsg_lat){
+					co2_excess <- co2_excess_factor * totalCO2 * spCO2defreze * ( Tsat - Ts )  ;
+				} else {
+					co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Tsat - Ts )  ;	
+				}
 				
 				
 				// Arhenius equation: A~10^10, Ea~30kJ/mol, MolMass = 44.0095
@@ -770,7 +775,12 @@ species cell parallel: true {
 				//co2_excess <- totalCO2 * CO2freezingCoeff * ln (Ts/Tsat); // [bar]
 				//co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * (exp(exp_param * Ts/Tsat) - exp(exp_param)) ;
 				//co2_excess <- CO2freezingCoeff * 10^10 * exp(-30000/(8.314462 * Ts))*44.0095/1000/ (marsArea / 4002);
-				co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Ts - Tsat ) ;
+				
+				if (latitude < sdsg_lat){
+					co2_excess <- co2_excess_factor * totalCO2 * spCO2defreze * ( Ts - Tsat ) ;
+				} else {
+					co2_excess <- co2_excess_factor * totalCO2 * CO2freezingCoeff * ( Ts - Tsat ) ;
+				}
 				
 				
 				if (co2_excess > frozenCO2){
@@ -819,7 +829,7 @@ species cell parallel: true {
 		
 			// check if co2_excess is too large
 			float tmpPsatCO2 <- 1.2264e7 * exp(-3167.8 / tmpTs);
-			float tmpPCO2 <- (atmCO2 + co2_excess * (pCO2greater?(1.0):(-1.0)) ) * exp(- height / 10000);
+			float tmpPCO2 <- (atmCO2 + co2_excess * (pCO2greater?(1.0):(-1.0)) ) * exp(- height / scaleHeight);
 			
 			if ( (tmpPCO2 > tmpPsatCO2 and pCO2greater) or (tmpPCO2 < tmpPsatCO2 and !pCO2greater)) {break; }
 			//if (pCO2greater or (tmpPCO2 < tmpPsatCO2 and !pCO2greater)) {break; }
@@ -941,6 +951,7 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Selected cell" var: selected_cell;
 	parameter "Selected cells" var: selected_cells;
 	parameter "Sublimation paramter" var: CO2freezingCoeff;
+	parameter "Sublimation paramter for south pole area" var: spCO2defreze;
 	parameter "Eddy heat transfer coeef" var: Kcoeff;
 	parameter "Hadley heat transfer coeef" var: hadleyParam;
 	parameter "Obliquity" var: nachylenieOsi;
@@ -954,6 +965,7 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Deep ground model, 0-none, 1-exists" var: deepGroundModel;
 	parameter "K regolith modifier for areas near the poles" var: kreg_mod;
 	parameter "Boundary lattitudes for K regolith modifier" var: kreg_lat;
+	parameter "Scale height" var: scaleHeight;
 	
 
 	parameter "Soil emissivity" var: emissivity;
