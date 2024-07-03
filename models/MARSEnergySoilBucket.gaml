@@ -114,6 +114,7 @@ global {
 	bool variableTauDust <- false;
 	float scaleHeight <- 11600; //[m] 
 	float constrTemp <- 50.0;		// [K] temperature constr.
+	bool albedoFile <- false;
 	
 	float sigma <- 0.00000005670374419; // Stefan-Boltzmann constant
     float ga <- 3.72076; 			// Mars gravitional acceleration [ms-2] [Nkg-1]
@@ -702,10 +703,19 @@ species cell parallel: true {
 		
 			latentCO2 <- 0.0;
 			
-			if (sunGlass_Ice = 0) { // sunGlass_Ice == 0
-				insol_en <- (1.0 - dustSunGlasses) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY	
-			} else { // sunGlass_Ice == 1
-				insol_en <- (1.0 - ( (frozenCO2 > 1e-8)?dustSunGlasses:0.0)) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
+			if (albedoFile){ // czytaj albedo z pliku
+				if (sunGlass_Ice = 0) { // sunGlass_Ice == 0
+					insol_en <- (1.0 - dustSunGlasses) *( (frozenCO2 > 1e-8)?(1 - (albedoIce - albedoGlobal + albedo)):(1 - albedo ) )* insol;  				// insolation ENERGY	
+				} else { // sunGlass_Ice == 1
+					insol_en <- (1.0 - ( (frozenCO2 > 1e-8)?dustSunGlasses:0.0)) *( (frozenCO2 > 1e-8)?(1 - (albedoIce - albedoGlobal + albedo)):(1 - albedo ) )* insol;  				// insolation ENERGY
+				}
+			} else { //przyjmij albedo stałe
+				if (sunGlass_Ice = 0) { // sunGlass_Ice == 0
+					insol_en <- (1.0 - dustSunGlasses) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY	
+				} else { // sunGlass_Ice == 1
+					insol_en <- (1.0 - ( (frozenCO2 > 1e-8)?dustSunGlasses:0.0)) *( (frozenCO2 > 1e-8)?(1 - albedoIce):(1 - albedoGlobal ) )* insol;  				// insolation ENERGY
+				}
+					
 			}
 			insol_en <- insol_en * (1.0 - total_sg);
 			//insol_en <- (1 - albedoGlobal ) * insol;  				// insolation ENERGY
@@ -973,6 +983,7 @@ experiment main_experiment until: (cycle > 6680)
 	parameter "Soil gray opacity" var: tauDust;
 	parameter "Albedo" var: albedoGlobal;
 	parameter "Ice albedo" var: albedoIce;
+	parameter "albedo from file" var: albedoFile;
 	parameter "Total sunglasses" var: total_sg;
 	parameter "Put sunglasses when ice only" var: sunGlass_Ice;
 	parameter "Dust subglasses on south pole" var: south_dsg;
